@@ -1,6 +1,6 @@
 # 開発ガイド
 
-`laya-web` (リポジトリ名: `hello-jev`) の開発環境構築、モデルエクスポート、ビルド、テスト、および CI/CD デプロイに関する手順である。
+`laya-web` (リポジトリ名: `hello-jev`) の開発環境構築、モデルエクスポート、ビルド、テスト、および CI/CD デプロイの手順。
 
 ## 開発環境構築
 
@@ -23,13 +23,13 @@ pnpm model:export
 pnpm dev
 ```
 
-ブラウザで表示された URL（標準: `http://127.0.0.1:5173/`）にアクセスし動作を確認する。
+起動後、ターミナルに表示される URL（標準: `http://127.0.0.1:5173/`）へブラウザからアクセスして動作を確認する。
 
 ## モデルのエクスポートと管理
 
 Hugging Face 上の MLX チェックポイントを ONNX Runtime Web 用フォーマットに変換して使用する。
 
-### 既定モデル仕様
+### 既定モデルの仕様
 
 - **モデル名**: `convaiinnovations/laya-multilingual`
 - **リビジョン**: `052592a15d198d9ad47da779604259b10b47b7aa`
@@ -38,14 +38,14 @@ Hugging Face 上の MLX チェックポイントを ONNX Runtime Web 用フォ�
 
 ### 出力先の変更と再変換
 
-出力先が既に存在する場合は上書きを防止するためエラーが発生する。
-別フォルダへの出力は以下のコマンドで実行する。
+出力先ディレクトリが既に存在する場合、誤上書きを防ぐためエラーが発生する。
+別フォルダへ出力する場合は以下のコマンドを実行する。
 
 ```sh
 uv run python scripts/export_model.py --output /path/to/new-model
 ```
 
-別の ModernBERT 系 Laya チェックポイントを指定する場合は `--source` および `--revision` オプションを使用する（検証済みは既定の多言語版のみ）。
+別の ModernBERT 系 Laya チェックポイントを指定する場合は `--source` および `--revision` オプションを使用する（動作検証済みは既定の多言語版のみ）。
 
 ## コマンドリファレンス
 
@@ -75,9 +75,9 @@ GitHub Actions により GitHub Pages へ自動デプロイされる（`.github/
 ### CI/CD パイプラインの処理手順
 
 1. **キャッシュ確認**
-   - 変換スクリプトと Python 依存ハッシュをキーに変換済みモデルを取得
+   - 変換スクリプトと Python 依存のハッシュをキーに変換済みモデルを取得
 2. **モデル変換**
-   - キャッシュ未ヒット時のみ Hugging Face からダウンロードしてエクスポート
+   - キャッシュ未ヒット時のみ Hugging Face からダウンロードしてエクスポートを実行
 3. **品質検証**
    - `pnpm typecheck`、`pnpm test`（カバレッジ計測）、`pnpm build:pages` を実行
 4. **配信物検査（`validate-pages.mjs`）**
@@ -86,7 +86,7 @@ GitHub Actions により GitHub Pages へ自動デプロイされる（`.github/
    - 全体サイズの上限検証（1 GB / 1,000,000,000 bytes 以下）
    - ONNX Runtime Web モジュールの依存検証
 5. **デプロイ**
-   - 全検証パス時のみ GitHub Pages へ自動公開
+   - すべての検証をパスした場合のみ GitHub Pages へ自動公開
 
 ### ローカルでの Pages ビルド検証
 
