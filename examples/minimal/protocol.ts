@@ -4,7 +4,7 @@ import type {
   Prediction,
   Questions,
   State,
-} from "laya-web";
+} from "@r4ai/laya-web";
 export type Request = {
   backend: Backend | "auto";
   modelUrl: string;

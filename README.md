@@ -1,4 +1,4 @@
-# laya-web
+# @r4ai/laya-web
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![GitHub Pages](https://img.shields.io/badge/Demo-GitHub%20Pages-brightgreen)](https://r4ai.github.io/hello-jev/)
@@ -33,7 +33,7 @@ LLMのような長文生成を行わず、入力テキストに対する単一�
 graph TD
     subgraph MainThread ["メインスレッド (UI)"]
         App["Web アプリケーション"]
-        Agent["laya-web Agent"]
+        Agent["@r4ai/laya-web Agent"]
     end
 
     subgraph WorkerThread ["Web Worker"]
@@ -65,7 +65,7 @@ React、Vue、SolidJS、Vanilla JS など任意のフロントエンド環境で
 ### 基本的な使い方
 
 ```ts
-import { load } from "laya-web";
+import { load } from "@r4ai/laya-web";
 
 // 1. モデルとランタイムのロード
 const agent = await load({

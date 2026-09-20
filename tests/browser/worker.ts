@@ -1,4 +1,4 @@
-import { load } from "laya-web";
+import { load } from "@r4ai/laya-web";
 import { createTokenizer } from "../../src/assets.js";
 import { prepare } from "../../src/core.js";
 import type { ModelConfig, Questions, State } from "../../src/types.js";

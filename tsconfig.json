@@ -9,7 +9,7 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "paths": {
-      "laya-web": ["./src/index.ts"]
+      "@r4ai/laya-web": ["./src/index.ts"]
     },
     "jsx": "preserve",
     "jsxImportSource": "solid-js",

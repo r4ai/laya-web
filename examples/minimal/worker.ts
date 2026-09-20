@@ -1,5 +1,5 @@
-import { load } from "laya-web";
-import type { Agent } from "laya-web";
+import { load } from "@r4ai/laya-web";
+import type { Agent } from "@r4ai/laya-web";
 import type { Request, Response } from "./protocol.js";
 let agent: Agent | undefined;
 let requestedBackend: Request["backend"];
