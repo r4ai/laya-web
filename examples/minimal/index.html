@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Layaの分類モデルをブラウザ内で動かす最小サンプル。"
+    />
+    <title>Laya Web</title>
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <main>
+      <h1>Laya Web<span aria-hidden="true">.</span></h1>
+      <p class="intro">
+        文章から、ひとつ選ぶ。<br />推論はすべて、このブラウザの中で。
+      </p>
+      <form>
+        <label for="state">文章</label>
+        <textarea id="state" rows="4" required>
+料金が二重に請求されています。重複分を返金してください。</textarea
+        >
+        <label for="instructions">質問</label>
+        <input
+          id="instructions"
+          value="この問い合わせを担当する部署は？"
+          required
+        />
+        <label for="choices"
+          >選択肢 <span class="hint">1行にひとつ</span></label
+        >
+        <textarea id="choices" rows="3" required>
+請求・返金
+技術サポート
+営業</textarea
+        >
+        <div class="actions">
+          <button type="submit">実行する</button>
+          <label class="backend-label" for="backend">実行環境</label>
+          <select id="backend" aria-label="実行環境">
+            <option value="auto">自動 · WebGPU優先</option>
+            <option value="webgpu">WebGPU</option>
+            <option value="wasm">Wasm · CPU</option>
+          </select>
+        </div>
+      </form>
+      <p id="status" role="status">初回はモデル約934 MBを読み込みます。</p>
+      <progress id="progress" hidden aria-label="モデルの読み込み"></progress>
+      <section id="result" hidden aria-label="分類結果">
+        <div class="result-heading">
+          <h2 id="choice"></h2>
+          <span id="timing"></span>
+        </div>
+        <div id="probabilities"></div>
+        <details>
+          <summary>APIの出力</summary>
+          <pre id="json"></pre>
+        </details>
+      </section>
+      <footer>
+        <a href="https://github.com/mizorewww/laya-mlx">Laya-MLX</a>
+        をもとにしたブラウザ向け実装。<br />モデルの読み込み後、入力文をサーバーへ送信せずに分類します。
+      </footer>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

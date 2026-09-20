@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+.venv/
+__pycache__/
+.pytest_cache/
+examples/minimal/public/models/
+*.tgz
+.DS_Store

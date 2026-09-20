@@ -1,0 +1,84 @@
+diff --git a/dist/tokenizers.cjs b/dist/tokenizers.cjs
+index 46e461d4da5d34b01e500b427cfaeec5922ad564..7806f2c917bf0a69db0e855d4654cc6ebf5f0d45 100644
+--- a/dist/tokenizers.cjs
++++ b/dist/tokenizers.cjs
+@@ -1252,6 +1252,7 @@ var Metaspace = class extends PreTokenizer_default {
+     this.replacement = config.replacement ?? "\u2581";
+     this.str_rep = config.str_rep || this.replacement;
+     this.prepend_scheme = config.prepend_scheme ?? "always";
++    this.split = config.split ?? true;
+   }
+   /**
+    * This method takes a string, replaces spaces with the replacement character,
+@@ -1273,7 +1274,10 @@ var Metaspace = class extends PreTokenizer_default {
+     ) {
+       normalized = this.str_rep + normalized;
+     }
+-    return [normalized];
++    if (!this.split) return [normalized];
++    return normalized.split(this.replacement)
++      .map((part, index) => index === 0 ? part : this.replacement + part)
++      .filter(part => part.length > 0);
+   }
+ };
+ var Metaspace_default = Metaspace;
+@@ -3085,7 +3089,7 @@ var Tokenizer = class {
+       const subsections = this.splitter_normalized.split(processed_text);
+       subsections.forEach((subsection, j) => {
+         const added_token = this.added_tokens_map.get(subsection);
+-        if (added_token) {
++        if (added_token?.normalized) {
+           if (added_token.lstrip && j > 0) {
+             subsections[j - 1] = subsections[j - 1].trimEnd();
+           }
+@@ -3098,7 +3102,7 @@ var Tokenizer = class {
+         if (subsection.length === 0) {
+           return [];
+         }
+-        if (this.added_tokens_map.has(subsection)) {
++        if (this.added_tokens_map.get(subsection)?.normalized) {
+           return [subsection];
+         }
+         const section_tokens = this.pre_tokenizer !== null ? this.pre_tokenizer(subsection, {
+diff --git a/dist/tokenizers.mjs b/dist/tokenizers.mjs
+index d2b6d9cfb84a83db2374e0a462ce011cd9ccb395..4bdf22bb50465623efb82ca9252331d4f3c58849 100644
+--- a/dist/tokenizers.mjs
++++ b/dist/tokenizers.mjs
+@@ -1179,6 +1179,7 @@ var Metaspace = class extends PreTokenizer_default {
+     this.replacement = config.replacement ?? "\u2581";
+     this.str_rep = config.str_rep || this.replacement;
+     this.prepend_scheme = config.prepend_scheme ?? "always";
++    this.split = config.split ?? true;
+   }
+   /**
+    * This method takes a string, replaces spaces with the replacement character,
+@@ -1200,7 +1201,10 @@ var Metaspace = class extends PreTokenizer_default {
+     ) {
+       normalized = this.str_rep + normalized;
+     }
+-    return [normalized];
++    if (!this.split) return [normalized];
++    return normalized.split(this.replacement)
++      .map((part, index) => index === 0 ? part : this.replacement + part)
++      .filter(part => part.length > 0);
+   }
+ };
+ var Metaspace_default = Metaspace;
+@@ -3012,7 +3016,7 @@ var Tokenizer = class {
+       const subsections = this.splitter_normalized.split(processed_text);
+       subsections.forEach((subsection, j) => {
+         const added_token = this.added_tokens_map.get(subsection);
+-        if (added_token) {
++        if (added_token?.normalized) {
+           if (added_token.lstrip && j > 0) {
+             subsections[j - 1] = subsections[j - 1].trimEnd();
+           }
+@@ -3025,7 +3029,7 @@ var Tokenizer = class {
+         if (subsection.length === 0) {
+           return [];
+         }
+-        if (this.added_tokens_map.has(subsection)) {
++        if (this.added_tokens_map.get(subsection)?.normalized) {
+           return [subsection];
+         }
+         const section_tokens = this.pre_tokenizer !== null ? this.pre_tokenizer(subsection, {

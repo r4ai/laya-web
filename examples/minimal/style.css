@@ -1,0 +1,193 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #222;
+  background: #fff;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+main {
+  width: min(100% - 40px, 560px);
+  margin: 64px auto 32px;
+}
+h1 {
+  font-size: 30px;
+  letter-spacing: -0.04em;
+  margin: 0;
+  font-weight: 650;
+}
+h1 span {
+  color: #397a61;
+}
+.intro {
+  color: #656565;
+  line-height: 1.8;
+  margin: 12px 0 32px;
+  font-size: 14px;
+}
+label {
+  display: block;
+  margin: 20px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.hint {
+  color: #777;
+  font-weight: 400;
+  margin-left: 8px;
+  font-size: 12px;
+}
+textarea,
+input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d9ddd9;
+  border-radius: 6px;
+  color: #222;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+}
+textarea {
+  resize: vertical;
+  display: block;
+}
+:focus-visible {
+  outline: 2px solid #397a61;
+  outline-offset: 3px;
+}
+.actions {
+  margin-top: 24px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+button {
+  border: 0;
+  border-radius: 6px;
+  padding: 12px 24px;
+  background: #285d47;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:hover {
+  background: #1f4d3a;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+select {
+  margin-left: auto;
+  max-width: 100%;
+  background: #fff;
+  color: #555;
+  border: 0;
+  padding: 8px 0;
+  font: inherit;
+  font-size: 12px;
+}
+.backend-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+#status {
+  font-size: 12px;
+  color: #686868;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+#status[data-error] {
+  color: #a32323;
+}
+progress {
+  width: 100%;
+  height: 5px;
+  accent-color: #397a61;
+}
+#result {
+  margin-top: 32px;
+  border-top: 1px solid #e4e7e4;
+  padding-top: 24px;
+}
+.result-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+h2 {
+  font-size: 20px;
+  margin: 0 0 20px;
+}
+#timing {
+  font-size: 11px;
+  color: #666;
+  text-align: right;
+}
+.probability {
+  margin: 12px 0;
+  font-size: 13px;
+}
+.probability-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.track {
+  height: 4px;
+  background: #eef1ee;
+  border-radius: 3px;
+}
+.fill {
+  height: 100%;
+  background: #397a61;
+  border-radius: 3px;
+}
+details {
+  margin-top: 24px;
+  font-size: 12px;
+  color: #666;
+}
+summary {
+  cursor: pointer;
+}
+pre {
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.7;
+  background: #f7f8f7;
+  padding: 14px;
+  border-radius: 6px;
+  color: #333;
+}
+footer {
+  margin-top: 48px;
+  color: #888;
+  font-size: 11px;
+  line-height: 1.9;
+}
+a {
+  color: #666;
+  text-underline-offset: 3px;
+}
+@media (max-width: 480px) {
+  main {
+    margin-top: 32px;
+  }
+  .actions {
+    gap: 8px;
+  }
+}

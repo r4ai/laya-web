@@ -1,0 +1,44 @@
+{
+  "name": "laya-web",
+  "version": "0.1.0",
+  "description": "Laya typed decisions in the browser with ONNX Runtime Web",
+  "type": "module",
+  "license": "Apache-2.0",
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:demo": "pnpm build && vite build examples/minimal",
+    "dev": "pnpm build && vite examples/minimal --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage",
+    "model:export": "uv run python scripts/export_model.py --output examples/minimal/public/models/laya",
+    "model:verify": "uv run --group reference python scripts/verify_model.py --model examples/minimal/public/models/laya",
+    "prepack": "pnpm build",
+    "test:browser": "pnpm build && vite tests/browser --host 127.0.0.1 --port 5174"
+  },
+  "packageManager": "pnpm@11.22.0",
+  "dependencies": {
+    "onnxruntime-web": "1.30.0"
+  },
+  "devDependencies": {
+    "@huggingface/tokenizers": "0.2.0",
+    "@types/node": "^24.13.6",
+    "@vitest/coverage-v8": "4.0.18",
+    "esbuild": "0.27.7",
+    "prettier": "3.8.1",
+    "typescript": "5.9.3",
+    "vite": "7.3.1",
+    "vitest": "4.0.18"
+  }
+}

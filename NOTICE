@@ -1,0 +1,24 @@
+Laya Web
+Copyright 2026 Laya Web contributors
+
+This project adapts prompt construction, calibration and neural architecture from:
+- laya-mlx, https://github.com/mizorewww/laya-mlx
+  Copyright 2026 laya-mlx contributors; Apache-2.0.
+  Source revision: fc1df62828a3fedf4d8229fdac1cbd85f1cdf337
+- Laya, https://github.com/NandhaKishorM/laya
+  Copyright Convai Innovations and Laya contributors; Apache-2.0.
+  Upstream revision cited by laya-mlx: 6a5819129eb220570792e417e49723d697efd76f
+- ModernBERT architecture, Hugging Face Transformers; Apache-2.0.
+
+Modifications: TypeScript browser protocol/runtime, a portable ONNX export using
+PyTorch, separated FP16 vocabulary embeddings, single-question execution, and a
+minimal browser example. This is an independent port, not an official release
+of Convai Innovations or laya-mlx.
+
+Pretrained weights are downloaded separately from Convai Innovations on
+Hugging Face (Apache-2.0). No weights are included in Git or the npm package.
+
+The JavaScript build bundles @huggingface/tokenizers 0.2.0 by Hugging Face
+(Apache-2.0). Local modifications restore Rust-compatible Metaspace split=true
+and normalized=false added-token behavior. The patch is in patches/ and is
+covered by reduced regression cases and reference-tokenizer comparisons.

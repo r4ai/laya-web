@@ -1,0 +1,5 @@
+allowBuilds:
+  protobufjs: false
+  esbuild: true
+patchedDependencies:
+  "@huggingface/tokenizers@0.2.0": patches/@huggingface__tokenizers@0.2.0.patch
