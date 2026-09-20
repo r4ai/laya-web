@@ -2,7 +2,7 @@
 
 [Laya-MLX](https://github.com/mizorewww/laya-mlx) の typed decision モデルを、ONNX Runtime Web の **WebGPU / Wasm** でブラウザ内実行する TypeScript ライブラリ。文章生成ではなく、`choice`（選択）、`score`（ルーブリック評価）、`noul`（命題の確率）を返します。
 
-最小サンプルは Vanilla TypeScript + Vite。推論は Web Worker 内で行い、Wasm 実行中も画面を操作できます。推論サーバーや API キーは不要です。
+最小サンプルは SolidJS + TypeScript + Vite。推論は Web Worker 内で行い、Wasm 実行中も画面を操作できます。推論サーバーや API キーは不要です。
 
 ## まず動かす
 
@@ -71,6 +71,20 @@ try {
 - WebGPUでも非対応演算はWasmに割り当てられます。`agent.backend` は選択した実行プロバイダー構成を表し、全演算がGPUで動いたことを保証しません。
 - 質問は1問ずつ処理し、同じagentへの呼び出しを直列化。`dispose()` は受付済み処理の完了後に解放し、以後の呼び出しを拒否します。
 - `load({ signal })` と `predict(state, questions, { signal })` で中断可能。実行済みのONNX演算自体は中断できず、完了後に結果を破棄します。
+
+## 確信度（confidence）
+
+各回答の `confidence` はモデル出力から計算した確信度です。サンプルでは選択結果の下に表示します。
+
+- `choice` / `score`: `1 - H(p) / log(k)`。`p` は温度補正後の確率、`H` はエントロピー、`k` は選択肢数。均等なら0、一つに集中するほど1。選択肢が一つだけなら1です。
+- `noul`: `max(P(true), P(false))`。範囲は0.5〜1で、choice / scoreと尺度が異なります。
+- 最大の選択確率とも異なります。例えば二択で80% / 20%なら `confidence` は約27.8%です。
+- 正答率や「正しい確率」を保証する値ではありません。入力・選択肢の作り方でも変化するため、自動採用の閾値は用途ごとの評価データで決めてください。
+- `action.act_probability` は別のaction headの出力で、確信度とは別の指標です。
+
+## SolidJSサンプル
+
+[`examples/minimal/app.tsx`](examples/minimal/app.tsx) がフォーム・進捗・結果の状態を管理します。フォーム送信を抑止してからWorkerを起動するので、起動失敗時も画面内のエラーとして扱い、再試行できます。実行中の二重送信を防ぎ、コンポーネント破棄・HMR時にはWorkerを終了します。ライブラリ本体はSolidJSに依存しません。
 
 UIを止めないため、実アプリでもWorkerから呼び出してください。最小例は [`examples/minimal/worker.ts`](examples/minimal/worker.ts) です。
 

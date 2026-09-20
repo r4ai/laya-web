@@ -23,13 +23,21 @@
 | サンプル   | idle → loading → running → result              | 状態表示、入力を実行中ロック、結果表示        | ブラウザ操作                    |
 | サンプル   | result → 重複選択肢で送信                      | エラー、古い結果を隠す、再試行可能            | ブラウザ操作                    |
 
+| SolidJSサンプル | Worker起動失敗 → 再送信 | ページ遷移を抑止、エラー表示後に再試行 | DOM結合・回帰 |
+| SolidJSサンプル | 実行中 → 再送信 / unmount | 二重送信なし / Worker終了・handler解除 | DOM結合 |
+| SolidJSサンプル | Worker異常終了 / 送信失敗 → 再送信 | 破損Workerを終了し、新規Workerで実行 | DOM結合 |
+| SolidJSサンプル | モデルエラー → 再送信 | 同じWorkerで再試行 | DOM結合 |
+| SolidJSサンプル | 進捗の総量不明 / fallback / initialize | 不定進捗表示・状態更新 | DOM結合 |
+| SolidJSサンプル | 結果 → 不正な選択肢 → 修正して再送信 | 旧結果を消去し、再試行 | DOM結合 |
+| SolidJSサンプル | 選択確率80%・confidence 0.4183 | 80.0%と確信度41.8%を別表示 | DOM結合 |
+
 ## 再現コマンド
 
 通常の開発環境では `pnpm typecheck`、`pnpm test`、`uv run pytest`、`pnpm build:demo`。
 実モデルは `pnpm model:export` → `pnpm model:verify` → `pnpm test:browser`。
 検証ページのBackendを選択してRun parity suiteを押します。
 
-- 通常テスト: 38件。参照fixtureがあると追加のトークナイザー比較1件を実行。ない場合、その1件はskipと表示。
+- 通常テスト: 47件（うちSolidJS DOM結合9件）。参照fixtureがあると追加のトークナイザー比較1件を実行。ない場合、その1件はskipと表示。
 - Python: 小型モデル1テスト内で27組合せを検証。CPUで実行可能。
 - 実モデル: 9問（日本語2、英語3、構造化state3、1024トークン長文1）。
 - ブラウザ: 実モデル9問に加え、3問の同一リクエストを2回繰り返し、dispose後の拒否まで検証。
@@ -66,3 +74,11 @@ Python exporterは固定したPyTorchのlegacy ONNX exporterを使用するた�
 1200×900 / 390×844の表示で横はみ出しなし。ページ名、非空画面、エラーオーバーレイなし、console error/warnなしを確認。
 日本語入力→実行→確率表示、重複選択肢→エラーと旧結果非表示→修正後の再実行、API出力の開閉とEnter操作を確認しました。
 パッケージは `pnpm pack` 後に別ディレクトリへnpmインストールし、公開 `load` のimportが成功しています。
+
+## SolidJS移行の回帰検証
+
+旧実装でWorkerコンストラクターを失敗させると、submit handler登録に到達せず、submitイベントの `defaultPrevented` がfalseになることを確認しました（修正前の回帰テストは失敗）。SolidJS版は送信抑止後にWorkerを遅延生成し、同条件でエラー表示と再試行が成功します。ユーザーが観測した再読み込みの環境条件そのものは未特定です。
+
+SolidJS移行後: 全48テスト成功（skipなし）。サンプルのV8カバレッジはstatements 97.97%、branches 84.12%、lines 99.08%。`pnpm typecheck`、`pnpm build:demo`、frozen lockfileでのインストールが成功。配布ビルドのWebGPU / Wasmで日本語の実推論、Enter送信、重複選択肢のエラーと旧結果消去、修正後の再実行を確認しました。入力は保持され、ページの再読み込みなしで結果と確信度を表示します。
+
+画面は1200×1000 / 390×844で横はみ出し・Viteエラーオーバーレイなし。確信度表示とAPI出力の開閉を確認しました。モバイル幅の確認はデスクトップChromiumのviewport変更で、実端末の推論検証ではありません。

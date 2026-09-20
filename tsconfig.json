@@ -10,13 +10,18 @@
     "noEmit": true,
     "paths": {
       "laya-web": ["./src/index.ts"]
-    }
+    },
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "types": ["vite/client"]
   },
   "include": [
     "src",
     "tests/*.ts",
     "examples/minimal/*.ts",
     "vitest.config.ts",
-    "tests/browser/*.ts"
+    "tests/browser/*.ts",
+    "examples/minimal/*.tsx",
+    "tests/*.tsx"
   ]
 }

@@ -1,3 +1,4 @@
+import solid from "vite-plugin-solid";
 import { defineConfig } from "vite";
 import {
   createReadStream,
@@ -15,6 +16,7 @@ export default defineConfig({
   worker: { format: "es" },
   optimizeDeps: { exclude: ["onnxruntime-web"] },
   plugins: [
+    solid(),
     {
       name: "self-host-ort",
       configureServer(server) {
