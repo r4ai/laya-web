@@ -39,8 +39,8 @@ function fixture() {
     "index.html",
     "LICENSE",
     "NOTICE",
-    "ort/ort-wasm-simd-threaded.jsep.mjs",
-    "ort/ort-wasm-simd-threaded.jsep.wasm",
+    "ort/ort-wasm-simd-threaded.asyncify.mjs",
+    "ort/ort-wasm-simd-threaded.asyncify.wasm",
   ])
     writeFileSync(join(root, file), "asset");
   return root;
@@ -64,5 +64,15 @@ it("rejects an oversized site", async () => {
 it("rejects an incomplete manifest", async () => {
   const root = fixture();
   writeFileSync(join(root, "models/laya/config.json"), '{"files":{}}');
+  await expect(validatePages(root)).rejects.toThrow();
+});
+
+it("rejects a missing runtime module referenced by the bundled worker", async () => {
+  const root = fixture();
+  mkdirSync(join(root, "assets"));
+  writeFileSync(
+    join(root, "assets/worker.js"),
+    'const moduleName = "ort-wasm-simd-threaded.jsep.mjs";',
+  );
   await expect(validatePages(root)).rejects.toThrow();
 });

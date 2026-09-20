@@ -42,7 +42,7 @@ export default defineConfig({
         }
         // ORT's JS and WASM must have exactly the same version, including in production.
         for (const file of readdirSync(ortDir).filter((f) =>
-          /^ort-wasm-simd-threaded\.jsep\.(wasm|mjs)$/.test(f),
+          /^ort-wasm-simd-threaded\.asyncify\.(wasm|mjs)$/.test(f),
         )) {
           this.emitFile({
             type: "asset",

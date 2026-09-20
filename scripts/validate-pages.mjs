@@ -18,8 +18,8 @@ export async function validatePages(root, maxBytes = 1_000_000_000) {
     "index.html",
     "LICENSE",
     "NOTICE",
-    "ort/ort-wasm-simd-threaded.jsep.mjs",
-    "ort/ort-wasm-simd-threaded.jsep.wasm",
+    "ort/ort-wasm-simd-threaded.asyncify.mjs",
+    "ort/ort-wasm-simd-threaded.asyncify.wasm",
   ]) {
     if (!(await stat(join(root, file))).size)
       throw new Error(`Empty asset: ${file}`);
@@ -44,8 +44,18 @@ export async function validatePages(root, maxBytes = 1_000_000_000) {
   })) {
     if (entry.isSymbolicLink())
       throw new Error(`Symlink in Pages artifact: ${entry.name}`);
-    if (entry.isFile())
-      bytes += (await stat(join(entry.parentPath, entry.name))).size;
+    if (entry.isFile()) {
+      const path = join(entry.parentPath, entry.name);
+      bytes += (await stat(path)).size;
+      if (entry.name.endsWith(".js")) {
+        const code = await readFile(path, "utf8");
+        for (const [module] of code.matchAll(/ort-wasm[\w.-]+\.mjs/g)) {
+          for (const name of [module, module.replace(/\.mjs$/, ".wasm")]) {
+            await stat(join(root, "ort", name));
+          }
+        }
+      }
+    }
   }
   if (bytes > maxBytes)
     throw new Error(`Pages size limit exceeded: ${bytes} > ${maxBytes}`);

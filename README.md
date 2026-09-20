@@ -35,7 +35,7 @@ pnpm model:export             # モデル未生成の場合のみ
 pnpm build:pages              # ビルドと公開前検査
 ```
 
-公開前検査は必須ファイル、モデルのサイズ・SHA-256、サイト全体が1,000,000,000 bytes以下であることを確認します。デモは相対URLを使用するため `/hello-jev/` 配下でも動作します。ランタイムはWebGPUとWasmの両方で使用するJSEP版のみを同梱し、LICENSEとNOTICEも配信します。
+公開前検査は必須ファイル、モデルのサイズ・SHA-256、サイト全体が1,000,000,000 bytes以下であることを確認します。デモは相対URLを使用するため `/hello-jev/` 配下でも動作します。ランタイムはWebGPUとWasmの両方で使用するAsyncify版のみを同梱し、LICENSEとNOTICEも配信します。
 
 初回のモデル取得は約934 MBです。[GitHub Pagesの容量・帯域制限](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)に留意してください。
 
