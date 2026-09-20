@@ -3,26 +3,30 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![GitHub Pages](https://img.shields.io/badge/Demo-GitHub%20Pages-brightgreen)](https://r4ai.github.io/hello-jev/)
 
-**`laya-web`** は、[Laya-MLX](https://github.com/mizorewww/laya-mlx) の Decision モデルを、ONNX Runtime Web（**WebGPU / Wasm**）を用いて**ブラウザ内で完全ローカル実行**する TypeScript ライブラリです。
+[Laya-MLX](https://github.com/mizorewww/laya-mlx) の Decision モデルを、ONNX Runtime Web（WebGPU / Wasm）によりブラウザ内で完全ローカル実行する TypeScript ライブラリである。
 
-一般的な LLM のような長文テキスト生成ではなく、入力テキストに対する**単一選択 (`choice`)・ルーブリック段階評価 (`score`)・命題の真偽判定 (`noul`)** などの「型付き意思決定（Typed Decisions）」を高速・軽量・高精度に返します。
+LLMのような長文生成ではなく、入力テキストに対する単一選択（`choice`）・ルーブリック段階評価（`score`）・命題真偽判定（`noul`）などの型付き意思決定（Typed Decisions）を高速・軽量・高精度に処理する。
 
-👉 **[オンラインデモを今すぐ試す](https://r4ai.github.io/hello-jev/)**
+👉 [オンラインデモ](https://r4ai.github.io/hello-jev/)
 
----
+## 主な特徴
 
-## ✨ 主な特徴
+- 🔒 **完全ブラウザ完結・サーバーレス**
+  - 外部 API や推論サーバー不要
+  - プライバシーの保護
+  - API 通信コストおよびレート制限の回避
+- ⚡ **Web Worker によるスムーズな UI**
+  - 画面レンダリングや操作を妨げない非同期推論
+- 🚀 **WebGPU / Wasm の自動選択**
+  - 対応環境では WebGPU で高速化
+  - 非対応環境では Wasm へ自動フォールバック
+- 🎯 **確信度（Confidence）付きの型付き出力**
+  - 予測結果と同時にエントロピーベースの確信度を算出
+  - 信頼性に応じた条件分岐の容易化
 
-- 🔒 **完全ブラウザ完結・サーバーレス**: 外部 API や推論サーバーは一切不要。プライバシーを保護し、API 通信コストやレート制限を気にせず利用できます。
-- ⚡ **Web Worker によるスムーズな UI**: 推論処理は Web Worker 内で実行されるため、重いモデル計算中も画面のレンダリングやユーザー操作を妨げません。
-- 🚀 **WebGPU / Wasm の自動切り替え**: WebGPU に対応した環境では GPU 高速化を利用し、非対応環境では Wasm へ自動フォールバックします。
-- 🎯 **確信度（Confidence）付きの型付き出力**: 予測結果とともにエントロピーベースの確信度を出力するため、信頼性に応じた条件分岐や判定処理が容易です。
+## アーキテクチャ
 
----
-
-## 🏗 アーキテクチャ概要
-
-`laya-web` は、メインスレッド（UI）の快適さを維持しながらブラウザのハードウェアリソースを最大限に活用します。
+メインスレッドのレスポンス性を維持しながらブラウザのハードウェアリソースを活用する構成である。
 
 ```mermaid
 graph TD
@@ -51,15 +55,13 @@ graph TD
 ```
 
 > [!NOTE]
-> 多言語モデルの巨大な埋め込み表は WebGPU のメモリ制限を超えるため、**FP16 埋め込み表 (`embeddings.f16.bin`)** を分離し、必要な行のみ CPU で抽出して ONNX へ渡す最適化を行っています。
+> 多言語モデルの巨大な埋め込み表は WebGPU のメモリ制限を超えるため、FP16 埋め込み表 (`embeddings.f16.bin`) を分離し、必要な行のみ CPU で抽出して ONNX へ渡す構成を採用している。
 
----
+## クイックツアー
 
-## 📦 クイックツアー（ライブラリの使い方）
+任意フロントエンド（React, Vue, SolidJS, Vanilla JS 等）で利用可能である。
 
-フレームワークを問わず、任意の Web アプリケーション（React, Vue, SolidJS, Vanilla JS 等）に組み込めます。
-
-### コード例
+### 基本的な使い方
 
 ```ts
 import { load } from "laya-web";
@@ -73,7 +75,7 @@ const agent = await load({
 });
 
 try {
-  // 2. テキストと質問の定義
+  // 2. 予測の実行
   const result = await agent.predict(
     "料金が二重に請求されています。返金してください。",
     {
@@ -106,7 +108,7 @@ try {
 }
 ```
 
-### 対応する質問タイプ
+### 対応質問タイプ
 
 | タイプ | 概要 | `criteria` の指定 | 返り値の性質 |
 | :--- | :--- | :--- | :--- |
@@ -114,20 +116,19 @@ try {
 | **`score`** | ルーブリック評価 | レベル名の配列 | `0` 始まりのレベルインデックス期待値 |
 | **`noul`** | 命題真偽 | オプションで `{ false: 説明, true: 説明 }` | 命題が真である確率 $P(\text{true})$ |
 
----
+## 確信度（Confidence）の定義
 
-## 🎯 確信度（Confidence）について
+回答に含まれる `confidence` は、出力確率分布のエントロピー（偏り）から算出した 0.0 〜 1.0 の指標である。
 
-各回答に含まれる `confidence` は、モデルの出力確率分布のエントロピー（偏り）から計算された指標です（0.0 〜 1.0）。
+- **`choice` / `score`**
+  - 確率が一つの選択肢に集中しているほど 1.0 に近接
+  - 選択肢間で分散しているほど 0.0 に近接
+- **`noul`**
+  - 判定の明確さ（$\max(P(\text{true}), P(\text{false}))$）を表現（範囲: 0.5 〜 1.0）
 
-- **`choice` / `score`**: 確率が一つの選択肢に集中しているほど 1.0 に近づき、選択肢間で分散しているほど 0.0 に近づきます。
-- **`noul`**: 判定の明確さ（$\max(P(\text{true}), P(\text{false}))$）を表します（範囲: 0.5 〜 1.0）。
+## デモアプリの起動
 
----
-
-## 💻 デモアプリの起動
-
-ローカル環境でサンプルデモ（SolidJS + Vite）を起動して試すことができます。
+ローカル環境でサンプルデモ（SolidJS + Vite）を起動する手順である。
 
 ```sh
 pnpm install --frozen-lockfile
@@ -135,24 +136,19 @@ pnpm model:export
 pnpm dev
 ```
 
-詳細な開発環境のセットアップやモデル変換については **[開発ガイド (docs/development.md)](docs/development.md)** を参照してください。
+詳細な開発環境セットアップやモデル変換については [開発ガイド](docs/development.md) を参照されたい。
 
----
+## ドキュメント一覧
 
-## 📖 ドキュメント一覧
+- [開発ガイド](docs/development.md): ローカル開発手順、モデルエクスポート、ビルドコマンド、CI/CD 設定
+- [検証仕様と品質保証ガイド](docs/validation.md): テストアーキテクチャ、精度照合結果、トラブルシューティング
 
-- **[開発ガイド (docs/development.md)](docs/development.md)**: ローカル開発手順、モデルエクスポート、各種ビルドコマンド、CI/CD 設定
-- **[検証仕様と品質保証 (docs/validation.md)](docs/validation.md)**: テストアーキテクチャ、精度照合結果、トラブルシューティング
+## ライセンス・出典
 
----
-
-## 📄 ライセンス・出典
-
-本プロジェクトは [Apache-2.0 License](LICENSE) のもとで公開されています。
+本プロジェクトは [Apache-2.0 License](LICENSE) の下で公開されている。
 
 - **派生元プロジェクト**: [Laya-MLX](https://github.com/mizorewww/laya-mlx)
 - **使用チェックポイント**: [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual)
 - **推論エンジン**: [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html)
 
-詳細な著作権表示および変更点については [NOTICE](NOTICE) をご覧ください。
-
+著作権表示および変更点の詳細は [NOTICE](NOTICE) に記載している。
