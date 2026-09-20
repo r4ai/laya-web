@@ -25,7 +25,8 @@
     "model:export": "uv run python scripts/export_model.py --output examples/minimal/public/models/laya",
     "model:verify": "uv run --group reference python scripts/verify_model.py --model examples/minimal/public/models/laya",
     "prepack": "pnpm build",
-    "test:browser": "pnpm build && vite tests/browser --host 127.0.0.1 --port 5174"
+    "test:browser": "pnpm build && vite tests/browser --host 127.0.0.1 --port 5174",
+    "build:pages": "pnpm build:demo && node scripts/validate-pages.mjs"
   },
   "packageManager": "pnpm@11.22.0",
   "dependencies": {

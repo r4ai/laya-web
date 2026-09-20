@@ -82,3 +82,17 @@ Python exporterは固定したPyTorchのlegacy ONNX exporterを使用するた�
 SolidJS移行後: 全48テスト成功（skipなし）。サンプルのV8カバレッジはstatements 97.97%、branches 84.12%、lines 99.08%。`pnpm typecheck`、`pnpm build:demo`、frozen lockfileでのインストールが成功。配布ビルドのWebGPU / Wasmで日本語の実推論、Enter送信、重複選択肢のエラーと旧結果消去、修正後の再実行を確認しました。入力は保持され、ページの再読み込みなしで結果と確信度を表示します。
 
 画面は1200×1000 / 390×844で横はみ出し・Viteエラーオーバーレイなし。確信度表示とAPI出力の開閉を確認しました。モバイル幅の確認はデスクトップChromiumのviewport変更で、実端末の推論検証ではありません。
+
+## Pages公開前検査
+
+`pnpm build:pages` で配布成果物を検査します。`tests/pages.test.ts` の状態表:
+
+| 入力状態 | 期待結果 |
+| --- | --- |
+| 必須ファイル・manifest・hash正常、容量上限内 | 成功、合計bytesを返す |
+| モデルファイル欠落 | 公開を止める |
+| 同じサイズのモデル破損 | SHA-256不一致で公開を止める |
+| 容量上限超過 | 公開を止める |
+| manifestの必須項目欠落 | 公開を止める |
+
+GitHub Actionsでも型検査・V8カバレッジ付きテスト・成果物検査を通過した場合のみdeployジョブを実行します。Pages上の実推論は公開後のブラウザ操作で別途検証します。

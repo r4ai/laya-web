@@ -10,3 +10,12 @@ testpaths = ["tests/python"]
 
 [dependency-groups]
 reference = ["laya-mlx @ git+https://github.com/mizorewww/laya-mlx.git@fc1df62828a3fedf4d8229fdac1cbd85f1cdf337"]
+
+# Model export is CPU-only; avoid downloading CUDA runtimes on Linux CI.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

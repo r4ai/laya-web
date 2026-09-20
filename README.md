@@ -22,6 +22,23 @@ pnpm dev
 uv run python scripts/export_model.py --output /path/to/new-model
 ```
 
+## GitHub Pages
+
+公開デモ: https://r4ai.github.io/hello-jev/
+
+`.github/workflows/pages.yml` が `main` へのpushとActionsの **Run workflow** でビルド・公開します。GitHubのSettings → Pages → Sourceは **GitHub Actions** に設定します。
+
+CIは固定リビジョンのモデルを変換し、変換スクリプトとPython依存のハッシュをキーにキャッシュします。モデルはGitに追加しません。初回はダウンロード・変換に時間がかかります。型検査とテストの成功後、モデルとランタイムを含むサイト全体をPagesへ配信します。
+
+```sh
+pnpm model:export             # モデル未生成の場合のみ
+pnpm build:pages              # ビルドと公開前検査
+```
+
+公開前検査は必須ファイル、モデルのサイズ・SHA-256、サイト全体が1,000,000,000 bytes以下であることを確認します。デモは相対URLを使用するため `/hello-jev/` 配下でも動作します。ランタイムはWebGPUとWasmの両方で使用するJSEP版のみを同梱し、LICENSEとNOTICEも配信します。
+
+初回のモデル取得は約934 MBです。[GitHub Pagesの容量・帯域制限](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)に留意してください。
+
 ## ライブラリとして使う
 
 まだ npm には公開していません。ローカルで `pnpm pack` し、利用側で生成された `laya-web-0.1.0.tgz` をインストールできます。ESM / TypeScript型定義を含み、フレームワークに依存しません。

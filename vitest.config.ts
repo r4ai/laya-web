@@ -7,7 +7,11 @@ export default defineConfig({
     include: ["tests/*.test.{ts,tsx}"],
     coverage: {
       provider: "v8",
-      include: ["src/**/*.ts", "examples/minimal/app.tsx"],
+      include: [
+        "src/**/*.ts",
+        "examples/minimal/app.tsx",
+        "scripts/validate-pages.mjs",
+      ],
     },
   },
 });
