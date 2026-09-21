@@ -50,8 +50,8 @@ flowchart TD
   - Validates criteria arrays for non-emptiness and unique choice labels
 - **Token Budgeting & Truncation**
   - Enforces the 1,024-token budget
-  - Protects candidate options and delimiter tokens while truncating excess state context from the right
-  - Throws `RangeError` if candidate options alone exceed the total budget
+  - Limits option texts to 48 tokens and preserves option markers while truncating excess state context from the right
+  - Throws `RangeError` if candidate options and structural delimiters exceed the budget
 - **Tokenizer Parity**
   - Matches the JavaScript `@huggingface/tokenizers` wrapper against the native Rust reference
   - Validated across multilingual text, complex JSON, mask tokens, and whitespace variations
@@ -65,12 +65,11 @@ flowchart TD
 
 ### Layer 2: PyTorch vs ONNX Logit Parity (pytest)
 
-The ONNX export is compared directly against the PyTorch reference model across 9 test scenarios varying sequence lengths and option counts:
+The ONNX export is compared directly against the PyTorch reference model across 9 test configurations varying sequence lengths and question types:
 
 $$\text{Configurations: } (L, K) \in \{(8, 2), (19, 3), (64, 5)\} \times \{\text{choice}, \text{score}, \text{noul}\}$$
 
-- **Logit Tolerance**: Maximum absolute difference $\le 0.002$ ($\text{atol}=0.002, \text{rtol}=0.001$)
-- **Argmax Match**: Predicted top choice must be identical across all test inputs
+- **Numerical Tolerance**: Verifies both logits and action predictions match PyTorch within $\text{atol}=2\times 10^{-5}$ ($0.00002$) and $\text{rtol}=1\times 10^{-5}$ ($0.00001$)
 
 ### Layer 3: Browser Hardware Integration (Chromium WebGPU / Wasm)
 
@@ -109,19 +108,19 @@ Executed during `pnpm build:pages` and in automated CI pipelines:
 
 By default, Apple MLX GPU execution uses TensorFloat-32 (TF32) math for FP32 matrix multiplications, which introduces minor numerical divergence from standard IEEE 754 FP32.
 
-When generating ground-truth comparison values with [`scripts/verify_model.py`](../scripts/verify_model.py), the script sets `MLX_ENABLE_TF32=0` and executes on the MLX CPU backend to guarantee true FP32 mathematical parity.
+When generating ground-truth comparison values with [`scripts/verify_model.py`](https://github.com/r4ai/laya-web/blob/main/scripts/verify_model.py), the script explicitly specifies `device="cpu"` to execute on the MLX CPU backend, bypassing GPU TF32 math to guarantee standard IEEE 754 FP32 parity.
 
 ## Critical Engineering Findings & Edge Cases
 
 ### 1. Metaspace Tokenizer Normalization Patch
 
 - **Issue**: `@huggingface/tokenizers@0.2.0` ignores the `split: true` configuration in Metaspace pre-tokenizers, causing unnormalized special tokens to be incorrectly matched against normalized text
-- **Resolution**: Applied a targeted patch in [`patches/@huggingface__tokenizers@0.2.0.patch`](../patches/@huggingface__tokenizers@0.2.0.patch) to ensure tokenization parity with Hugging Face's Python and Rust implementations
+- **Resolution**: Applied a targeted patch in [`patches/@huggingface__tokenizers@0.2.0.patch`](https://github.com/r4ai/laya-web/blob/main/patches/@huggingface__tokenizers@0.2.0.patch) to ensure tokenization parity with Hugging Face's Python and Rust implementations
 
 ### 2. WebGPU Storage Buffer Limits & CPU-Bound Embedding Slicing
 
-- **Issue**: Modern multilingual models use large vocabularies (>128,000 tokens). At 768 hidden dimensions, a full FP32 embedding matrix requires ~393 MB, exceeding browser WebGPU storage buffer binding limits (commonly 128 MB or 256 MB depending on device and driver)
-- **Resolution**: `@r4ai/laya-web` stores raw FP16 embeddings (`embeddings.f16.bin`, ~248 MB) in CPU memory. During inference, only the active input token vectors are sliced, converted from FP16 to FP32 on the CPU, and fed directly as a compact tensor into the ONNX graph
+- **Issue**: Modern multilingual models use large vocabularies (256,000 tokens). At 768 hidden dimensions, a full FP32 embedding matrix requires ~786 MB, exceeding browser WebGPU storage buffer binding limits (commonly 128 MB or 256 MB depending on device and driver)
+- **Resolution**: `@r4ai/laya-web` stores raw FP16 embeddings (`embeddings.f16.bin`, ~393.22 MB) in CPU memory. During inference, only the active input token vectors are sliced, converted from FP16 to FP32 on the CPU, and fed directly as a compact tensor into the ONNX graph
 
 ### 3. Context Budgeting & Token Window Allocation
 
@@ -131,13 +130,13 @@ The model operates within a 1,024-token maximum window:
 [CLS] + [Instruction Head] + [SEP] + [Option Markers] + [SEP] + [State Context] + [SEP]
 ```
 
-- Candidate options receive a reserved token budget to prevent option truncation
-- If the instruction head and options consume most of the budget, input state context is truncated from the right
-- If options alone exceed the token budget, the runtime rejects the call early with an explicit `RangeError`
+- Candidate option texts are initially limited to 48 tokens each and shortened further if the head budget is constrained, preserving option markers and candidates
+- State context is truncated from the right to fit the remaining token budget
+- If candidate options and structural delimiters alone exceed the 1,024-token window, the runtime rejects early with a `RangeError`
 
 ## Asset Streaming & Download Performance
 
-The runtime downloads model assets using a 2-slot concurrent worker pool ([`src/assets.ts`](../src/assets.ts)). Pre-allocating a single `Uint8Array` based on expected byte counts eliminates intermediate chunk buffering and reduces memory churn.
+The runtime downloads model assets using a 2-slot concurrent worker pool ([`src/assets.ts`](https://github.com/r4ai/laya-web/blob/main/src/assets.ts)). Pre-allocating a single `Uint8Array` based on expected byte counts eliminates intermediate chunk buffering and reduces memory churn.
 
 ### Sequential vs. 2-Slot Parallel Download Benchmark
 

@@ -80,7 +80,7 @@ Open `http://127.0.0.1:5173/` in your browser to inspect the application.
 
 ## Model Export Pipeline
 
-The export script ([`scripts/export_model.py`](../scripts/export_model.py)) converts Hugging Face checkpoints into partitioned browser assets.
+The export script ([`scripts/export_model.py`](https://github.com/r4ai/laya-web/blob/main/scripts/export_model.py)) converts Hugging Face checkpoints into partitioned browser assets.
 
 ### Default Checkpoint Specification
 
@@ -94,10 +94,10 @@ The export script ([`scripts/export_model.py`](../scripts/export_model.py)) conv
 ```
 models/laya/
 ├── config.json                 # Architecture parameters, calibration, and SHA-256 hashes
-├── model.onnx                  # ONNX computation graph structure (external data format)
-├── model.onnx.data             # Model weights loaded on demand (~684 MB)
-├── embeddings.f16.bin          # Raw FP16 token embedding table (~248 MB)
-└── tokenizer/                  # Hugging Face tokenizer files
+├── model.onnx                  # ONNX computation graph structure (~5.37 MB)
+├── model.onnx.data             # External model weights downloaded upfront (~501.20 MB)
+├── embeddings.f16.bin          # Raw FP16 token embedding table (~393.22 MB)
+└── tokenizer/                  # Hugging Face tokenizer files (~34.36 MB)
     ├── tokenizer.json
     └── tokenizer_config.json
 ```
@@ -135,7 +135,7 @@ The primary CI workflow (`.github/workflows/ci.yml`) runs on pull requests and p
 
 The demo site deploys automatically to GitHub Pages on every push to `main` (`.github/workflows/pages.yml`).
 
-Before deployment, [`scripts/validate-pages.mjs`](../scripts/validate-pages.mjs) verifies distribution integrity:
+Before deployment, [`scripts/validate-pages.mjs`](https://github.com/r4ai/laya-web/blob/main/scripts/validate-pages.mjs) verifies distribution integrity:
 
 - **Asset Presence**: Ensures `index.html`, `LICENSE`, `NOTICE`, and ONNX Runtime Wasm modules exist and are non-empty
 - **Model Checksums**: Recomputes SHA-256 hashes for all model files and matches them against `config.json`
@@ -170,19 +170,17 @@ pnpm changeset
 
 ### Automated Release Flow
 
-Merging a pull request containing changesets into `main` triggers `.github/workflows/release.yml`:
+Pushes to `main` trigger `.github/workflows/release.yml`. The workflow uses `changesets/action/select-mode` to determine whether to update the version PR or publish packages:
 
 ```mermaid
 flowchart TD
-    Merge["PR Merged to main"] --> CI["Run CI Quality Checks"]
-    CI --> Check{"Pending Changesets?"}
+    Push["Push to main"] --> CI["Run CI Quality Checks"]
+    CI --> Mode{"changesets select-mode"}
 
-    Check -- Yes --> VersionPR["Create / Update Version Packages PR"]
-    Check -- No --> CheckTag{"New Git Tag Pushed?"}
-
-    CheckTag -- Yes --> Publish["Build & Publish to npm via OIDC"]
-    Publish --> Release["Create GitHub Release & Tag"]
-    CheckTag -- No --> Done["No Action Required"]
+    Mode -- "Pending Changesets (version)" --> VersionPR["Create / Update Version Packages PR"]
+    Mode -- "Unpublished Packages (publish)" --> Publish["Build & Publish to npm via OIDC"]
+    Publish --> Release["Create GitHub Release & Git Tag"]
+    Mode -- "Up to Date (none)" --> Done["No Action Required"]
 ```
 
 ### Initial Registry & OIDC Setup

@@ -16,27 +16,26 @@ Laya evaluates structured decisions (**typed decisions**) directly over input st
 
 ## Key Features
 
-- **100% Client-Side Execution**: Zero network requests, full data privacy, and no backend API fees
-- **Web Worker Architecture**: Offloads tensor computation to maintain a responsive 60fps UI thread
+- **100% Client-Side Inference**: Evaluates decisions entirely in the browser without sending input data to external servers
+- **Web Worker Compatible**: Runs smoothly in dedicated Web Workers to keep the UI thread responsive at 60fps
 - **WebGPU with Wasm Fallback**: WebGPU hardware acceleration with automatic fallback to single-threaded SIMD WebAssembly
 - **CPU Embedding Slicing**: Slices FP16 embeddings on the CPU to bypass browser WebGPU storage buffer limits on large vocabularies (>128k tokens)
 - **Calibrated Decision Confidence**: Computes normalized Shannon entropy ($0.0$ to $1.0$) for reliable uncertainty filtering
 
 ## Architecture
 
-The runtime executes inference inside a dedicated Web Worker to isolate heavy compute from UI rendering:
+The library runs in both main threads and Web Workers. Hosting the agent inside a dedicated Web Worker isolates heavy tensor computation from the UI:
 
 ```mermaid
 flowchart TD
     subgraph Host ["Browser Environment"]
         subgraph Main ["Main Thread (UI)"]
             App["Web Application"]
-            Client["Agent Client (@r4ai/laya-web)"]
         end
 
-        subgraph Worker ["Web Worker (Background)"]
-            Driver["OnnxDriver"]
-            Tokenizer["Tokenizer (Wasm / Rust)"]
+        subgraph Worker ["Web Worker (Recommended)"]
+            Agent["Agent (@r4ai/laya-web)"]
+            Tokenizer["Tokenizer (JavaScript)"]
             Slicer["CPU Embedding Slicer<br/>(FP16 to FP32)"]
             ORT["ONNX Runtime Web"]
         end
@@ -47,16 +46,14 @@ flowchart TD
         Wasm["Wasm SIMD (Fallback)"]
     end
 
-    App -->|"predict(state, questions)"| Client
-    Client -->|postMessage| Driver
-    Driver --> Tokenizer
-    Tokenizer -->|Token IDs| Slicer
-    Slicer -->|Token Embeddings| ORT
+    App -->|"postMessage(state, questions)"| Agent
+    Agent --> Tokenizer
+    Tokenizer -->|"Token IDs"| Slicer
+    Slicer -->|"Token Embeddings"| ORT
     ORT --> WebGPU
-    ORT -.->|Fallback| Wasm
-    ORT -->|Logits| Driver
-    Driver -->|Answer Payload| Client
-    Client -->|Prediction Result| App
+    ORT -.->|"Fallback"| Wasm
+    ORT -->|"Logits"| Agent
+    Agent -->|"postMessage(Prediction)"| App
 ```
 
 ## Installation
@@ -71,7 +68,7 @@ yarn add @r4ai/laya-web onnxruntime-web
 
 ## Quickstart
 
-Run inference inside a Web Worker to keep the UI thread responsive. Serve model assets and ONNX Runtime Web Wasm binaries from your static file server (see the [Vite example](examples/minimal/vite.config.ts)).
+Run inference inside a Web Worker to keep the UI thread responsive. Serve model assets and ONNX Runtime Web Wasm binaries from your static file server (see the [Vite example](https://github.com/r4ai/laya-web/blob/main/examples/minimal/vite.config.ts)).
 
 ```ts
 import { load } from "@r4ai/laya-web";
@@ -119,7 +116,7 @@ try {
   // Inspect ordinal score
   const urgency = result.answers.urgency;
   if (urgency.type === "score") {
-    console.log("Urgency level:", urgency.score);
+    console.log("Urgency score:", urgency.score);
     console.log("Score legend:", urgency.legend);
   }
 
@@ -137,11 +134,11 @@ try {
 
 ## Decision Types
 
-| Type         | Target Task                   | `criteria` Schema                                                    | Output Structure                                                                           |
-| :----------- | :---------------------------- | :------------------------------------------------------------------- | :----------------------------------------------------------------------------------------- |
-| **`choice`** | Categorical classification    | String array `["A", "B"]` or dictionary `{ [label]: "description" }` | Selected label (`choice`), per-label distribution (`probabilities`), and `confidence`      |
-| **`score`**  | Ordinal grading on a rubric   | Ordered array of level criteria `["low", "medium", "high"]`          | Numeric score index (`score`), level mapping (`legend`), `probabilities`, and `confidence` |
-| **`noul`**   | Binary statement verification | Optional `{ false?: "description", true?: "description" }`           | Probability of truth (`noul` as $P(\text{true})$) and decision `confidence`                |
+| Type         | Target Task                   | `criteria` Schema                                                    | Output Structure                                                                                 |
+| :----------- | :---------------------------- | :------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------- |
+| **`choice`** | Categorical classification    | String array `["A", "B"]` or dictionary `{ [label]: "description" }` | Selected label (`choice`), per-label distribution (`probabilities`), and `confidence`            |
+| **`score`**  | Ordinal grading on a rubric   | Ordered array of level criteria `["low", "medium", "high"]`          | Expected score (`score` as a float), level mapping (`legend`), `probabilities`, and `confidence` |
+| **`noul`**   | Binary statement verification | Optional `{ false?: "description", true?: "description" }`           | Probability of truth (`noul` as $P(\text{true})$) and decision `confidence`                      |
 
 ## Confidence Calibration
 
@@ -167,11 +164,11 @@ Deploy the following files under your static `modelUrl` directory:
 
 | File                 | Approximate Size | Purpose                                                                |
 | :------------------- | :--------------- | :--------------------------------------------------------------------- |
-| `config.json`        | ~1 KB            | Architecture parameters, calibration temperatures, and SHA-256 digests |
-| `model.onnx`         | ~2.5 MB          | ONNX computation graph structure without model weights                 |
-| `model.onnx.data`    | ~684 MB          | Partitioned model weights loaded on demand by ONNX Runtime Web         |
-| `embeddings.f16.bin` | ~248 MB          | Raw FP16 token embedding table read by CPU memory                      |
-| `tokenizer/`         | ~1.6 MB          | Hugging Face tokenizer configuration and vocabulary files              |
+| `config.json`        | ~1.1 KB          | Architecture parameters, calibration temperatures, and SHA-256 digests |
+| `model.onnx`         | ~5.37 MB         | ONNX computation graph structure without weights                       |
+| `model.onnx.data`    | ~501.20 MB       | External model weights downloaded upfront for ONNX Runtime Web         |
+| `embeddings.f16.bin` | ~393.22 MB       | Raw FP16 token embedding table read by CPU memory                      |
+| `tokenizer/`         | ~34.36 MB        | Hugging Face tokenizer configuration and vocabulary files              |
 
 Export these files locally from the pinned checkpoint:
 
