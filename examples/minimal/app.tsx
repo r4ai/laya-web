@@ -69,6 +69,7 @@ function Field(props: {
     onInput: (event: { currentTarget: { value: string } }) =>
       props.onInput(event.currentTarget.value),
   };
+
   return (
     <>
       <label for={props.id}>
@@ -94,6 +95,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
   const { view, result, busy, download, fail, start } = createInference(() =>
     (props.createWorker ?? spawnWorker)(),
   );
+
   /** Binds a text control to its draft field. */
   const bind = (key: TextField) => ({
     get value() {
@@ -104,20 +106,24 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
     },
     onInput: (value: string) => setDraft(key, value),
   });
+
   function submit(event: SubmitEvent) {
     event.preventDefault();
     if (busy()) return;
+
     const question = toQuestion(draft);
     if (question instanceof Error) {
       fail(question.message);
       return;
     }
+
     start({
       state: draft.state,
       questions: { result: question },
       backend: draft.backend,
     });
   }
+
   return (
     <main>
       <h1>
@@ -137,6 +143,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
           required
           {...bind("state")}
         />
+
         <label for="question-type">Decision Type</label>
         <select
           id="question-type"
@@ -150,12 +157,14 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
           <option value="score">score · Ordinal score</option>
           <option value="noul">noul · Binary verification</option>
         </select>
+
         <Field
           id="instructions"
           label="Instructions"
           required
           {...bind("instructions")}
         />
+
         <Show when={draft.type === "choice"}>
           <Field
             id="choices"
@@ -166,6 +175,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
             {...bind("choices")}
           />
         </Show>
+
         <Show when={draft.type === "score"}>
           <Field
             id="scale"
@@ -176,6 +186,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
             {...bind("scale")}
           />
         </Show>
+
         <Show when={draft.type === "noul"}>
           <p class="hint">
             Computes the probability that the proposition is true
@@ -193,6 +204,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
             {...bind("trueCriterion")}
           />
         </Show>
+
         <div class="actions">
           <button type="submit" disabled={busy()}>
             {busy() ? "Running…" : "Run"}
@@ -214,6 +226,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
           </select>
         </div>
       </form>
+
       <p
         id="status"
         role="status"
@@ -221,6 +234,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
       >
         {status(view(), download())}
       </p>
+
       <Show when={download()}>
         {(bytes) => (
           <Show
@@ -237,11 +251,13 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
           </Show>
         )}
       </Show>
+
       <Show when={result()}>
         {(data) => (
           <ResultView data={data()} previous={view().phase !== "result"} />
         )}
       </Show>
+
       <footer>
         In-browser implementation based on{" "}
         <a href="https://github.com/mizorewww/laya-mlx">Laya-MLX</a>.
@@ -255,6 +271,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
 
 function ResultView(props: { data: Result; previous: boolean }) {
   const answer = () => props.data.result.answers.result;
+
   const title = () => {
     const a = answer();
     switch (a.type) {
@@ -266,17 +283,20 @@ function ResultView(props: { data: Result; previous: boolean }) {
         return `P(True) ${percent(a.noul)}`;
     }
   };
+
   const probabilities = () => {
     const a = answer();
     if (a.type === "noul") return { false: 1 - a.noul, true: a.noul };
     return a.probabilities;
   };
+
   const label = (key: string) => {
     const a = answer();
     if (a.type !== "score") return key;
     const description = a.legend[key];
     return `${key}: ${typeof description === "string" ? description : JSON.stringify(description)}`;
   };
+
   return (
     <section id="result" aria-label="Inference Result">
       <p class="result-version">
@@ -289,6 +309,7 @@ function ResultView(props: { data: Result; previous: boolean }) {
           {(props.data.elapsed / 1000).toFixed(2)} s
         </span>
       </div>
+
       <p class="confidence">
         Confidence <strong>{percent(answer().confidence)}</strong>
         <span>
@@ -297,6 +318,7 @@ function ResultView(props: { data: Result; previous: boolean }) {
             : "Probability concentration metric (1 minus normalized Shannon entropy); not an accuracy score"}
         </span>
       </p>
+
       <div id="probabilities">
         <For each={Object.entries(probabilities())}>
           {([key, value]) => (
@@ -312,6 +334,7 @@ function ResultView(props: { data: Result; previous: boolean }) {
           )}
         </For>
       </div>
+
       <details>
         <summary>API Output</summary>
         <pre id="json">{JSON.stringify(props.data.result, null, 2)}</pre>

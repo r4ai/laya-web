@@ -6,6 +6,7 @@ import solid from "vite-plugin-solid";
 const repoRoot = new URL("../../", import.meta.url);
 const ortFile = (name: string) =>
   new URL(`node_modules/onnxruntime-web/dist/${name}`, repoRoot);
+
 // ONNX Runtime Web resolves these by name under wasmPaths, and its JS and Wasm
 // must come from the same version, so dev and build serve the same two files.
 const ortFiles = [
@@ -20,6 +21,7 @@ const selfHostOrt = (): Plugin => ({
     server.middlewares.use("/ort", (req, res, next) => {
       const name = req.url?.slice(1).split("?")[0] ?? "";
       if (!ortFiles.includes(name)) return next();
+
       res.setHeader(
         "Content-Type",
         name.endsWith(".wasm") ? "application/wasm" : "text/javascript",

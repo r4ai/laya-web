@@ -5,6 +5,7 @@ import type {
   Questions,
   State,
 } from "@r4ai/laya-web";
+
 export type Request = {
   backend: Backend | "auto";
   modelUrl: string;
@@ -12,6 +13,7 @@ export type Request = {
   state: State;
   questions: Questions;
 };
+
 export type Response =
   | { type: "progress"; progress: LoadProgress }
   | { type: "running" }

@@ -31,6 +31,7 @@ const lines = (text: string) =>
  */
 export function toQuestion(draft: Draft): Question | Error {
   const instructions = draft.instructions;
+
   if (draft.type === "noul") {
     const criteria = Object.fromEntries(
       Object.entries({
@@ -42,6 +43,7 @@ export function toQuestion(draft: Draft): Question | Error {
       ? { type: "noul", instructions, criteria }
       : { type: "noul", instructions };
   }
+
   const criteria = lines(draft.type === "choice" ? draft.choices : draft.scale);
   if (draft.type === "score")
     return criteria.length

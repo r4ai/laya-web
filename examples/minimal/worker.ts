@@ -1,15 +1,19 @@
 import { load } from "@r4ai/laya-web";
 import type { Agent } from "@r4ai/laya-web";
 import type { Request, Response } from "./protocol.js";
+
 let agent: Agent | undefined;
 let requestedBackend: Request["backend"];
+
 const send = (message: Response) => postMessage(message);
+
 onmessage = async ({ data }: MessageEvent<Request>) => {
   try {
     if (agent && requestedBackend !== data.backend) {
       await agent.dispose();
       agent = undefined;
     }
+
     if (!agent) {
       agent = await load({
         modelUrl: data.modelUrl,
@@ -19,6 +23,7 @@ onmessage = async ({ data }: MessageEvent<Request>) => {
       });
       requestedBackend = data.backend;
     }
+
     send({ type: "running" });
     const start = performance.now();
     const result = await agent.predict(data.state, data.questions);

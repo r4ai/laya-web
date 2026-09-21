@@ -6,7 +6,9 @@ export type InferenceWorker = Pick<
   Worker,
   "postMessage" | "terminate" | "onmessage" | "onerror"
 >;
+
 export type Result = Extract<Response, { type: "result" }>;
+
 /** Phase of the single inference the UI is showing; `result` stays readable while the next one runs. */
 export type View =
   | { phase: "idle" }
@@ -14,6 +16,7 @@ export type View =
   | { phase: "running" }
   | { phase: "result" }
   | { phase: "error"; message: string };
+
 /** Byte counts of one asset, or of the current download as a whole. */
 export type Download = { loaded: number; total?: number };
 
@@ -30,11 +33,13 @@ export function createInference(createWorker: () => InferenceWorker) {
 
   const busy = () => view().phase === "loading" || view().phase === "running";
   const fail = (message: string) => setView({ phase: "error", message });
+
   /** Aggregated download, or `undefined` while nothing is downloading. */
   const download = (): Download | undefined => {
     const current = view();
     if (current.phase !== "loading" || current.progress?.phase !== "download")
       return undefined;
+
     const files = [...assets.values()];
     return {
       loaded: files.reduce((sum, file) => sum + file.loaded, 0),
@@ -55,6 +60,7 @@ export function createInference(createWorker: () => InferenceWorker) {
 
   function receive(data: Response) {
     if (!busy()) return;
+
     switch (data.type) {
       case "progress":
         if (data.progress.phase === "download")
@@ -64,15 +70,18 @@ export function createInference(createWorker: () => InferenceWorker) {
           });
         setView({ phase: "loading", progress: data.progress });
         break;
+
       case "running":
         setView({ phase: "running" });
         break;
+
       case "result":
         batch(() => {
           setResult(data);
           setView({ phase: "result" });
         });
         break;
+
       case "error":
         fail(data.error);
         break;
