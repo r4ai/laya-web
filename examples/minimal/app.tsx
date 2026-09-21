@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, Show } from "solid-js";
+import { batch, createSignal, For, onCleanup, Show } from "solid-js";
 import type { Request, Response } from "./protocol.js";
 
 export type InferenceWorker = Pick<
@@ -15,7 +15,7 @@ type View =
       progress?: Extract<Response, { type: "progress" }>["progress"];
     }
   | { phase: "running" }
-  | { phase: "result"; data: Result }
+  | { phase: "result" }
   | { phase: "error"; message: string };
 const initialState = "料金が二重に請求されています。重複分を返金してください。";
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
@@ -37,7 +37,7 @@ function status(view: View): string {
         return "WebGPUを利用できないため、Wasmで準備しています…";
       if (p.phase === "initialize") return "モデルを初期化しています…";
       const mb = (n: number) => (n / 1e6).toFixed(1);
-      return `読み込み中 · ${p.file} · ${mb(p.loaded ?? 0)}${p.total ? ` / ${mb(p.total)}` : ""} MB`;
+      return `読み込み中 · ${mb(p.loaded ?? 0)}${p.total ? ` / ${mb(p.total)}` : ""} MB`;
     }
   }
 }
@@ -49,16 +49,17 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
   const [choices, setChoices] = createSignal("請求・返金\n技術サポート\n営業");
   const [backend, setBackend] = createSignal<Request["backend"]>("auto");
   const [view, setView] = createSignal<View>({ phase: "idle" });
+  const [result, setResult] = createSignal<Result>();
+  const downloads = new Map<
+    string | undefined,
+    { loaded: number; total?: number }
+  >();
   const busy = () => view().phase === "loading" || view().phase === "running";
   const progress = () => {
     const v = view();
     return v.phase === "loading" && v.progress?.phase === "download"
       ? v.progress
       : undefined;
-  };
-  const result = () => {
-    const v = view();
-    return v.phase === "result" ? v.data : undefined;
   };
   let worker: InferenceWorker | undefined;
   function releaseWorker() {
@@ -78,14 +79,37 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
       case "error":
         fail(data.error);
         break;
-      case "progress":
-        setView({ phase: "loading", progress: data.progress });
+      case "progress": {
+        const progress = data.progress;
+        if (progress.phase !== "download") {
+          setView({ phase: "loading", progress });
+          break;
+        }
+        downloads.set(progress.file, {
+          loaded: progress.loaded ?? 0,
+          total: progress.total,
+        });
+        const files = [...downloads.values()];
+        setView({
+          phase: "loading",
+          progress: {
+            phase: "download",
+            loaded: files.reduce((sum, file) => sum + file.loaded, 0),
+            total: files.every((file) => file.total !== undefined)
+              ? files.reduce((sum, file) => sum + file.total!, 0)
+              : undefined,
+          },
+        });
         break;
+      }
       case "running":
         setView({ phase: "running" });
         break;
       case "result":
-        setView({ phase: "result", data });
+        batch(() => {
+          setResult(data);
+          setView({ phase: "result" });
+        });
         break;
     }
   }
@@ -100,6 +124,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
       fail("選択肢は重複しないように入力してください。");
       return;
     }
+    downloads.clear();
     setView({ phase: "loading" });
     try {
       if (!worker) {
@@ -207,7 +232,11 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
           </Show>
         )}
       </Show>
-      <Show when={result()}>{(data) => <ResultView data={data()} />}</Show>
+      <Show when={result()}>
+        {(data) => (
+          <ResultView data={data()} previous={view().phase !== "result"} />
+        )}
+      </Show>
       <footer>
         <a href="https://github.com/mizorewww/laya-mlx">Laya-MLX</a>{" "}
         をもとにしたブラウザ向け実装。
@@ -218,13 +247,16 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
   );
 }
 
-function ResultView(props: { data: Result }) {
+function ResultView(props: { data: Result; previous: boolean }) {
   const answer = () => {
     const a = props.data.result.answers.result;
     return a.type === "choice" ? a : undefined;
   };
   return (
     <section id="result" aria-label="分類結果">
+      <p class="result-version">
+        {props.previous ? "前回の結果" : "今回の結果"}
+      </p>
       <div class="result-heading">
         <h2 id="choice">{answer()?.choice}</h2>
         <span id="timing">

@@ -1,7 +1,7 @@
 import * as ort from "onnxruntime-web/webgpu";
 import { Agent } from "./agent.js";
 import type { Driver } from "./agent.js";
-import { createTokenizer, download } from "./assets.js";
+import { createTokenizer, download, downloadAssets } from "./assets.js";
 import { halfToFloat, validateConfig } from "./core.js";
 import type {
   Backend,
@@ -120,12 +120,25 @@ export async function load(options: LoadOptions): Promise<Agent> {
   const json = (data: Uint8Array) => JSON.parse(new TextDecoder().decode(data));
   const config: unknown = json(await get("config.json"));
   validateConfig(config);
-  const asset = (file: string) => get(file, config.files?.[file]?.bytes);
-  const tokenizer = createTokenizer(
-    json(await asset("tokenizer/tokenizer.json")),
-    json(await asset("tokenizer/tokenizer_config.json")),
+  const files = [
+    "embeddings.f16.bin",
+    "model.onnx.data",
+    "model.onnx",
+    "tokenizer/tokenizer.json",
+    "tokenizer/tokenizer_config.json",
+  ];
+  const assets = await downloadAssets(
+    base,
+    Object.fromEntries(
+      files.map((file) => [file, config.files?.[file]?.bytes]),
+    ),
+    options,
   );
-  const embeddingBytes = await asset("embeddings.f16.bin");
+  const tokenizer = createTokenizer(
+    json(assets["tokenizer/tokenizer.json"]),
+    json(assets["tokenizer/tokenizer_config.json"]),
+  );
+  const embeddingBytes = assets["embeddings.f16.bin"];
   if (embeddingBytes.byteLength !== config.vocabSize * config.hiddenSize * 2)
     throw new Error("Embedding size does not match config");
   const embeddings = new Uint16Array(
@@ -133,8 +146,8 @@ export async function load(options: LoadOptions): Promise<Agent> {
     embeddingBytes.byteOffset,
     embeddingBytes.byteLength / 2,
   );
-  const graph = await asset("model.onnx");
-  const data = await asset("model.onnx.data");
+  const graph = assets["model.onnx"];
+  const data = assets["model.onnx.data"];
   options.signal?.throwIfAborted();
   options.onProgress?.({ phase: "initialize" });
   const { session, backend } = await createSession(graph, data, options);

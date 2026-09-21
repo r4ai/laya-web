@@ -49,6 +49,60 @@ export async function download(
   }
 }
 
+/** Download a batch with two slots; failure cancels and settles all in-flight reads. */
+export async function downloadAssets(
+  base: URL,
+  files: Record<string, number | undefined>,
+  options: LoadOptions,
+): Promise<Record<string, Uint8Array>> {
+  options.signal?.throwIfAborted();
+  const controller = new AbortController();
+  const abort = () => controller.abort(options.signal?.reason);
+  options.signal?.addEventListener("abort", abort, { once: true });
+  const entries = Object.entries(files);
+  const assets: Record<string, Uint8Array> = {};
+  let next = 0;
+  async function consume() {
+    try {
+      while (next < entries.length) {
+        controller.signal.throwIfAborted();
+        const [file, bytes] = entries[next++];
+        assets[file] = await download(
+          base,
+          file,
+          {
+            ...options,
+            signal: controller.signal,
+          },
+          bytes,
+        );
+      }
+    } catch (error) {
+      controller.abort(error);
+      throw error;
+    }
+  }
+  try {
+    // Announce the complete manifest before bytes arrive so UI totals remain stable.
+    for (const [file, total] of entries) {
+      options.onProgress?.({ phase: "download", file, loaded: 0, total });
+    }
+    const readers = Array.from(
+      { length: Math.min(2, entries.length) },
+      consume,
+    );
+    try {
+      await Promise.all(readers);
+    } catch {
+      await Promise.allSettled(readers);
+      throw controller.signal.reason;
+    }
+    return assets;
+  } finally {
+    options.signal?.removeEventListener("abort", abort);
+  }
+}
+
 export function createTokenizer(
   json: object,
   config: Record<string, unknown>,

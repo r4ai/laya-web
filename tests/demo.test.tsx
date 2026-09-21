@@ -114,12 +114,13 @@ it("submits current input, locks while busy, and renders confidence separately f
     "返金を希望",
   );
   submit();
-  expect(screen.queryByRole("region", { name: "分類結果" })).toBeNull();
+  expect(screen.getByRole("region", { name: "分類結果" })).toBeTruthy();
+  expect(screen.getByText("前回の結果")).toBeTruthy();
   expect(worker.requests).toHaveLength(2);
 });
 
 it.each(["重複\n重複", " \n "])(
-  "rejects invalid choices %j and clears an older result",
+  "rejects invalid choices %j and preserves the previous result",
   (choices) => {
     const { worker } = setup();
     submit();
@@ -130,7 +131,8 @@ it.each(["重複\n重複", " \n "])(
     submit();
     expect(worker.requests).toHaveLength(1);
     expect(screen.getByRole("status").textContent).toContain("重複しない");
-    expect(screen.queryByRole("region", { name: "分類結果" })).toBeNull();
+    expect(screen.getByRole("region", { name: "分類結果" })).toBeTruthy();
+    expect(screen.getByText("前回の結果")).toBeTruthy();
     fireEvent.input(screen.getByLabelText(/選択肢/), {
       target: { value: "はい\nいいえ" },
     });
@@ -157,9 +159,14 @@ it.each(["crash", "send"])(
       second = new FakeWorker();
     const workers = [first, second];
     render(() => <App createWorker={() => workers.shift()!} />);
+    submit();
+    first.emit(result);
+    const region = screen.getByRole("region", { name: "分類結果" });
     first.failSend = failure === "send";
     submit();
     if (failure === "crash") first.crash();
+    expect(screen.getByRole("region", { name: "分類結果" })).toBe(region);
+    expect(screen.getByText("前回の結果")).toBeTruthy();
     expect(first.terminated).toBe(true);
     expect(first.onmessage).toBeNull();
     expect(screen.getByRole("status").textContent).toContain(
@@ -192,4 +199,65 @@ it("terminates the Worker and detaches handlers when unmounted during inference"
   expect(worker.terminated).toBe(true);
   expect(worker.onmessage).toBeNull();
   expect(worker.onerror).toBeNull();
+});
+
+it("keeps the same result DOM and expanded details through progress, errors and success", () => {
+  const { worker } = setup();
+  submit();
+  worker.emit(result);
+  const region = screen.getByRole("region", { name: "分類結果" });
+  const details = region.querySelector("details")!;
+  details.open = true;
+  submit();
+  for (const message of [
+    {
+      type: "progress",
+      progress: { phase: "download", file: "model", loaded: 1, total: 2 },
+    },
+    { type: "running" },
+    { type: "error", error: "Download failed" },
+  ] satisfies Response[]) {
+    worker.emit(message);
+    expect(screen.getByRole("region", { name: "分類結果" })).toBe(region);
+    expect(details.open).toBe(true);
+    expect(screen.getByText("前回の結果")).toBeTruthy();
+  }
+  submit();
+  const next = structuredClone(result);
+  if (next.result.answers.result.type === "choice")
+    next.result.answers.result.choice = "営業";
+  worker.emit(next);
+  expect(screen.getByRole("region", { name: "分類結果" })).toBe(region);
+  expect(region.querySelector("details")).toBe(details);
+  expect(details.open).toBe(true);
+  expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("営業");
+  expect(screen.queryByText("前回の結果")).toBeNull();
+});
+
+it("aggregates interleaved progress without double counting and resets on retry", () => {
+  const { worker } = setup();
+  submit();
+  const progress = (file: string, loaded: number, total?: number) =>
+    worker.emit({
+      type: "progress",
+      progress: { phase: "download", file, loaded, total },
+    });
+  progress("a", 0, 100);
+  progress("b", 0, 200);
+  progress("a", 20, 100);
+  progress("b", 50, 200);
+  progress("a", 40, 100);
+  const bar = screen.getByRole<HTMLProgressElement>("progressbar");
+  expect(bar.value).toBe(90);
+  expect(bar.max).toBe(300);
+  progress("unknown", 10);
+  expect(screen.getByRole("progressbar").hasAttribute("value")).toBe(false);
+  progress("unknown", 10, 10);
+  expect(screen.getByRole<HTMLProgressElement>("progressbar").value).toBe(100);
+  expect(screen.getByRole<HTMLProgressElement>("progressbar").max).toBe(310);
+  worker.emit({ type: "error", error: "Failed" });
+  submit();
+  progress("a", 2, 100);
+  expect(screen.getByRole<HTMLProgressElement>("progressbar").value).toBe(2);
+  expect(screen.getByRole<HTMLProgressElement>("progressbar").max).toBe(100);
 });

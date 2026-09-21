@@ -21,6 +21,7 @@
     "examples/minimal/*.ts",
     "vitest.config.ts",
     "tests/browser/*.ts",
+    "tests/browser/*.tsx",
     "examples/minimal/*.tsx",
     "tests/*.tsx"
   ]
