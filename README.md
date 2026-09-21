@@ -142,21 +142,32 @@ try {
 
 ## Confidence Calibration
 
-Every answer returns a normalized `confidence` value in $[0.0, 1.0]$. The value derives from the Shannon entropy of the calibrated probability distribution:
+Every answer returns a normalized `confidence` value in $[0.0, 1.0]$ representing probability concentration rather than ground-truth correctness. Computation depends on question type:
+
+### Categorical Choice & Ordinal Score (`choice`, `score`)
+
+- **Single Option ($K < 2$)**: Returns fixed `1.0`
+- **Multiple Options ($K \ge 2$)**: Normalized Shannon entropy over option count $K$
 
 $$H(P) = -\sum_{i=1}^{K} P(i) \ln P(i)$$
 
-$$\text{confidence} = \max\left(0, 1 - \frac{H(P)}{\ln K}\right)$$
+$$\text{confidence} = \max\left(0, \min\left(1, 1 - \frac{H(P)}{\ln K}\right)\right)$$
 
-### Interpretation by Type
+- Yields $1.0$ when probability concentrates entirely on a single option
+- Scales down to $0.0$ when probability distributes uniformly across all options
 
-- **`choice` and `score` ($K \ge 2$)**: Evaluated over option count $K$
-  - Yields $1.0$ when probability concentrates entirely on a single choice
-  - Scales down to $0.0$ when probabilities distribute uniformly across all options
-- **`noul` (Binary Verification)**: Evaluated directly as the classification margin $\max(P(\text{true}), P(\text{false}))$
-  - Range spans $[0.5, 1.0]$
-  - $0.5$ represents maximum ambiguity
-  - $1.0$ represents absolute certainty
+### Binary Verification (`noul`)
+
+Evaluated as the binary classification margin over calibrated probabilities:
+
+$$\text{confidence} = \max(P(\text{true}), 1 - P(\text{true}))$$
+
+- Range spans $[0.5, 1.0]$
+- $0.5$ represents maximum ambiguity (equal probability)
+- $1.0$ represents probability concentrated entirely on one outcome
+
+> [!NOTE]
+> `confidence` measures probability distribution sharpness. It does not guarantee prediction correctness or ground-truth accuracy.
 
 ## Model Assets & Hosting
 

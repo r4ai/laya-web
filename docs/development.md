@@ -56,18 +56,18 @@ Open `http://127.0.0.1:5173/` in your browser to inspect the application.
 
 ### Development & Quality Assurance
 
-| Command             | Description                                                      |
-| :------------------ | :--------------------------------------------------------------- |
-| `pnpm dev`          | Build library and start Vite dev server with hot reload          |
-| `pnpm lint`         | Run oxlint over JavaScript and TypeScript (fails on any warning) |
-| `pnpm lint:fix`     | Apply automatic oxlint fixes                                     |
-| `pnpm format:check` | Check code and documentation formatting with oxfmt               |
-| `pnpm format`       | Auto-format source code, configurations, and documentation       |
-| `pnpm typecheck`    | Run TypeScript compiler without emitting files                   |
-| `pnpm test`         | Run Vitest unit and integration suites with V8 coverage          |
-| `uv run pytest`     | Verify numerical logit parity between PyTorch and ONNX           |
-| `pnpm model:verify` | Benchmark exported ONNX outputs against Apple MLX FP32 reference |
-| `pnpm test:browser` | Launch browser test harness for WebGPU / Wasm parity checks      |
+| Command             | Description                                                                                |
+| :------------------ | :----------------------------------------------------------------------------------------- |
+| `pnpm dev`          | Build library and start Vite dev server with hot reload                                    |
+| `pnpm lint`         | Run oxlint over JavaScript and TypeScript (fails on any warning)                           |
+| `pnpm lint:fix`     | Apply automatic oxlint fixes                                                               |
+| `pnpm format:check` | Check code and documentation formatting with oxfmt                                         |
+| `pnpm format`       | Auto-format source code, configurations, and documentation                                 |
+| `pnpm typecheck`    | Run TypeScript compiler without emitting files                                             |
+| `pnpm test`         | Run Vitest unit and integration suites with V8 coverage                                    |
+| `uv run pytest`     | Verify numerical logit parity between PyTorch and ONNX                                     |
+| `pnpm model:verify` | Benchmark exported ONNX outputs against Apple MLX FP32 reference (generates `parity.json`) |
+| `pnpm test:browser` | Start local HTTP server (`:5174`) for browser WebGPU and Wasm parity checks                |
 
 ### Build & Packaging
 
@@ -112,6 +112,30 @@ uv run python scripts/export_model.py \
   --source convaiinnovations/laya-multilingual \
   --revision 052592a15d198d9ad47da779604259b10b47b7aa
 ```
+
+## Browser Parity Validation
+
+Hardware validation directly compares browser execution against Apple MLX FP32 CPU outputs:
+
+1. **Generate Reference Fixtures (Apple Silicon)**
+   Execute the MLX CPU reference benchmark to produce `examples/minimal/public/models/laya/parity.json`:
+
+   ```sh
+   pnpm model:verify
+   ```
+
+2. **Launch Local Test Server**
+   Start the browser test server on port 5174:
+
+   ```sh
+   pnpm test:browser
+   ```
+
+3. **Execute Parity Suite in Browser**
+   - Navigate to `http://127.0.0.1:5174/` in Chromium
+   - Choose execution backend (`webgpu` or `wasm`) from the dropdown
+   - Click **Run parity suite**
+   - Confirm all 9 fixtures pass token parity and numerical tolerances ($\le 0.000101$)
 
 ## Continuous Integration
 

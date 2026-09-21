@@ -19,15 +19,15 @@ flowchart TD
     subgraph L2 ["Layer 2: Numerical Parity (PyTorch vs ONNX)"]
         direction TB
         L2A["9 matrix test configurations"]
-        L2B["Max absolute logit difference <= 0.002"]
-        L2C["Argmax decision matching"]
+        L2B["pytest: atol=0.00002, rtol=0.00001"]
+        L2C["Logit & action tensor parity"]
     end
 
     subgraph L3 ["Layer 3: Browser Integration (Chromium)"]
         direction TB
         L3A["WebGPU & Wasm execution backends"]
-        L3B["Apple MLX FP32 CPU reference comparison"]
-        L3C["Token ID, marker offset & probability parity"]
+        L3B["MLX FP32 reference: error <= 0.002 & argmax match"]
+        L3C["Rounded output absolute difference <= 0.000101"]
     end
 
     subgraph L4 ["Layer 4: Release Audit (Pre-deployment)"]
@@ -76,7 +76,9 @@ $$\text{Configurations: } (L, K) \in \{(8, 2), (19, 3), (64, 5)\} \times \{\text
 The browser test harness verifies client-side execution directly within Chromium against an Apple MLX FP32 CPU reference implementation:
 
 - Evaluates identical prompt scenarios across both WebGPU and Wasm execution backends
-- Verifies exact matching of token IDs, special marker positions, and output probabilities (matching to 4 decimal places)
+- Verifies exact matching of token IDs and special marker positions
+- Verifies that absolute differences between 4-decimal rounded numeric outputs (`probabilities`, `score`, `noul`, `confidence`) remain within $\le 0.000101$
+- Verifies idempotent disposal lifecycle and reject-after-dispose behavior
 
 ### Layer 4: Pre-Deployment Integrity Audit (`validate-pages.mjs`)
 
@@ -97,12 +99,12 @@ Executed during `pnpm build:pages` and in automated CI pipelines:
 
 ### Baseline Parity Results
 
-| Target Scope                 | Test Cases      | Validation Result                                                       |
-| :--------------------------- | :-------------- | :---------------------------------------------------------------------- |
-| **Python ONNX vs MLX CPU**   | 9 / 9 scenarios | Identical argmax (maximum absolute logit difference: 0.00183)           |
-| **Browser WebGPU Inference** | 9 / 9 scenarios | Identical token IDs, marker positions, and 4-decimal probability parity |
-| **Browser Wasm Inference**   | 9 / 9 scenarios | Identical token IDs, marker positions, and 4-decimal probability parity |
-| **Unit & Integration Tests** | 86 / 86 tests   | 100% passing across all suites                                          |
+| Target Scope                 | Test Cases      | Validation Result                                                                       |
+| :--------------------------- | :-------------- | :-------------------------------------------------------------------------------------- |
+| **Python ONNX vs MLX CPU**   | 9 / 9 scenarios | Identical argmax (maximum absolute logit difference: 0.00183)                           |
+| **Browser WebGPU Inference** | 9 / 9 scenarios | Exact token IDs and marker positions; rounded output absolute difference $\le 0.000101$ |
+| **Browser Wasm Inference**   | 9 / 9 scenarios | Exact token IDs and marker positions; rounded output absolute difference $\le 0.000101$ |
+| **Unit & Integration Tests** | 86 / 86 tests   | 100% passing across all suites                                                          |
 
 ### Avoiding MLX GPU Precision Drift (TF32)
 
@@ -164,9 +166,11 @@ pnpm test
 uv run pytest
 
 # 3. Benchmark exported model against MLX FP32 CPU reference (Apple Silicon)
+# Generates examples/minimal/public/models/laya/parity.json required for browser testing
 pnpm model:verify
 
 # 4. Run browser hardware validation (WebGPU and Wasm)
+# Starts local harness on http://127.0.0.1:5174/ (requires parity.json; select backend and run)
 pnpm test:browser
 
 # 5. Validate distribution assets and bundle size budget
