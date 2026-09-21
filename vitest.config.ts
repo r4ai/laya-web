@@ -10,6 +10,8 @@ export default defineConfig({
       include: [
         "src/**/*.ts",
         "examples/minimal/app.tsx",
+        "examples/minimal/inference.ts",
+        "examples/minimal/question.ts",
         "scripts/validate-pages.mjs",
       ],
     },

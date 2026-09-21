@@ -1,56 +1,48 @@
+import { createReadStream } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { defineConfig, type Plugin } from "vite";
 import solid from "vite-plugin-solid";
-import { defineConfig } from "vite";
-import {
-  createReadStream,
-  existsSync,
-  readdirSync,
-  readFileSync,
-} from "node:fs";
-import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
-const ortDir = fileURLToPath(
-  new URL("../../node_modules/onnxruntime-web/dist/", import.meta.url),
-);
+
+const repoRoot = new URL("../../", import.meta.url);
+const ortFile = (name: string) =>
+  new URL(`node_modules/onnxruntime-web/dist/${name}`, repoRoot);
+// ONNX Runtime Web resolves these by name under wasmPaths, and its JS and Wasm
+// must come from the same version, so dev and build serve the same two files.
+const ortFiles = [
+  "ort-wasm-simd-threaded.asyncify.mjs",
+  "ort-wasm-simd-threaded.asyncify.wasm",
+];
+
+/** Serves the ONNX Runtime Web binaries from `/ort/` and ships the license files. */
+const selfHostOrt = (): Plugin => ({
+  name: "self-host-ort",
+  configureServer(server) {
+    server.middlewares.use("/ort", (req, res, next) => {
+      const name = req.url?.slice(1).split("?")[0] ?? "";
+      if (!ortFiles.includes(name)) return next();
+      res.setHeader(
+        "Content-Type",
+        name.endsWith(".wasm") ? "application/wasm" : "text/javascript",
+      );
+      createReadStream(ortFile(name)).on("error", next).pipe(res);
+    });
+  },
+  async generateBundle() {
+    const assets: Record<string, URL> = {
+      LICENSE: new URL("LICENSE", repoRoot),
+      NOTICE: new URL("NOTICE", repoRoot),
+      ...Object.fromEntries(
+        ortFiles.map((name) => [`ort/${name}`, ortFile(name)]),
+      ),
+    };
+    for (const [fileName, url] of Object.entries(assets))
+      this.emitFile({ type: "asset", fileName, source: await readFile(url) });
+  },
+});
+
 export default defineConfig({
   base: "./",
   worker: { format: "es" },
   optimizeDeps: { exclude: ["onnxruntime-web"] },
-  plugins: [
-    solid(),
-    {
-      name: "self-host-ort",
-      configureServer(server) {
-        server.middlewares.use("/ort/", (req, res, next) => {
-          const name = req.url?.split("?")[0]?.slice(1) ?? "";
-          if (!/^ort-[\w.-]+\.(wasm|mjs)$/.test(name)) return next();
-          const path = resolve(ortDir, name);
-          if (!existsSync(path)) return next();
-          res.setHeader(
-            "Content-Type",
-            name.endsWith(".wasm") ? "application/wasm" : "text/javascript",
-          );
-          createReadStream(path).pipe(res);
-        });
-      },
-      generateBundle() {
-        for (const file of ["LICENSE", "NOTICE"]) {
-          this.emitFile({
-            type: "asset",
-            fileName: file,
-            source: readFileSync(new URL(`../../${file}`, import.meta.url)),
-          });
-        }
-        // ORT's JS and WASM must have exactly the same version, including in production.
-        for (const file of readdirSync(ortDir).filter((f) =>
-          /^ort-wasm-simd-threaded\.asyncify\.(wasm|mjs)$/.test(f),
-        )) {
-          this.emitFile({
-            type: "asset",
-            fileName: `ort/${file}`,
-            source: readFileSync(resolve(ortDir, file)),
-          });
-        }
-      },
-    },
-  ],
+  plugins: [solid(), selfHostOrt()],
 });

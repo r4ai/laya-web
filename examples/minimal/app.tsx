@@ -1,28 +1,26 @@
-import { batch, createSignal, For, onCleanup, Show } from "solid-js";
+import { For, Show } from "solid-js";
+import { createStore } from "solid-js/store";
 import type { Question } from "@r4ai/laya-web";
-import type { Request, Response } from "./protocol.js";
+import {
+  createInference,
+  spawnWorker,
+  type Download,
+  type InferenceWorker,
+  type Result,
+  type View,
+} from "./inference.js";
+import { defaultDraft, toQuestion, type Draft } from "./question.js";
+import type { Request } from "./protocol.js";
 
-export type InferenceWorker = Pick<
-  Worker,
-  "postMessage" | "terminate" | "onmessage" | "onerror"
->;
-const createWorker = (): InferenceWorker =>
-  new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
-type Result = Extract<Response, { type: "result" }>;
-type View =
-  | { phase: "idle" }
-  | {
-      phase: "loading";
-      progress?: Extract<Response, { type: "progress" }>["progress"];
-    }
-  | { phase: "running" }
-  | { phase: "result" }
-  | { phase: "error"; message: string };
-const initialState =
-  "I was charged twice for my subscription this month. Please issue a refund.";
+export type { InferenceWorker };
+
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
+const megabytes = (bytes: number) => (bytes / 1e6).toFixed(1);
 
-function status(view: View): string {
+/** Draft fields edited through a text control. */
+type TextField = Exclude<keyof Draft, "type" | "backend">;
+
+function status(view: View, download: Download | undefined): string {
   switch (view.phase) {
     case "idle":
       return "First run downloads ~934 MB of model assets";
@@ -32,156 +30,93 @@ function status(view: View): string {
       return view.message;
     case "result":
       return "Completed · Processed entirely in this browser";
-    case "loading": {
-      const p = view.progress;
-      if (!p) return "Preparing…";
-      if (p.phase === "fallback")
-        return "WebGPU unavailable; falling back to Wasm…";
-      if (p.phase === "initialize") return "Initializing model…";
-      const mb = (n: number) => (n / 1e6).toFixed(1);
-      return `Loading · ${mb(p.loaded ?? 0)}${p.total ? ` / ${mb(p.total)}` : ""} MB`;
-    }
+    case "loading":
+      if (download)
+        return `Loading · ${megabytes(download.loaded)}${download.total ? ` / ${megabytes(download.total)}` : ""} MB`;
+      switch (view.progress?.phase) {
+        case "fallback":
+          return "WebGPU unavailable; falling back to Wasm…";
+        case "initialize":
+          return "Initializing model…";
+        default:
+          return "Preparing…";
+      }
   }
 }
 
-export function App(props: { createWorker?: () => InferenceWorker }) {
-  const [state, setState] = createSignal(initialState);
-  const [instructions, setInstructions] = createSignal(
-    "Which support department should handle this request?",
-  );
-  const [choices, setChoices] = createSignal(
-    "Billing & Refunds\nTechnical Support\nSales",
-  );
-  const [questionType, setQuestionType] =
-    createSignal<Question["type"]>("choice");
-  const [scale, setScale] = createSignal("Normal\nElevated\nImmediate");
-  const [falseCriterion, setFalseCriterion] = createSignal("");
-  const [trueCriterion, setTrueCriterion] = createSignal("");
-  const [backend, setBackend] = createSignal<Request["backend"]>("auto");
-  const [view, setView] = createSignal<View>({ phase: "idle" });
-  const [result, setResult] = createSignal<Result>();
-  const downloads = new Map<
-    string | undefined,
-    { loaded: number; total?: number }
-  >();
-  const busy = () => view().phase === "loading" || view().phase === "running";
-  const progress = () => {
-    const v = view();
-    return v.phase === "loading" && v.progress?.phase === "download"
-      ? v.progress
-      : undefined;
+/** Labelled text control; `rows` renders a textarea instead of a single-line input. */
+function Field(props: {
+  id: string;
+  label: string;
+  hint?: string;
+  rows?: number;
+  required?: boolean;
+  value: string;
+  disabled: boolean;
+  onInput: (value: string) => void;
+}) {
+  const control = {
+    id: props.id,
+    get required() {
+      return props.required;
+    },
+    get value() {
+      return props.value;
+    },
+    get disabled() {
+      return props.disabled;
+    },
+    onInput: (event: { currentTarget: { value: string } }) =>
+      props.onInput(event.currentTarget.value),
   };
-  let worker: InferenceWorker | undefined;
-  function releaseWorker() {
-    if (!worker) return;
-    worker.onmessage = null;
-    worker.onerror = null;
-    worker.terminate();
-    worker = undefined;
-  }
-  onCleanup(releaseWorker);
-  function fail(message: string) {
-    setView({ phase: "error", message });
-  }
-  function receive(data: Response) {
-    if (!busy()) return;
-    switch (data.type) {
-      case "error":
-        fail(data.error);
-        break;
-      case "progress": {
-        const progress = data.progress;
-        if (progress.phase !== "download") {
-          setView({ phase: "loading", progress });
-          break;
-        }
-        downloads.set(progress.file, {
-          loaded: progress.loaded ?? 0,
-          total: progress.total,
-        });
-        const files = [...downloads.values()];
-        setView({
-          phase: "loading",
-          progress: {
-            phase: "download",
-            loaded: files.reduce((sum, file) => sum + file.loaded, 0),
-            total: files.every((file) => file.total !== undefined)
-              ? files.reduce((sum, file) => sum + file.total!, 0)
-              : undefined,
-          },
-        });
-        break;
-      }
-      case "running":
-        setView({ phase: "running" });
-        break;
-      case "result":
-        batch(() => {
-          setResult(data);
-          setView({ phase: "result" });
-        });
-        break;
-    }
-  }
+  return (
+    <>
+      <label for={props.id}>
+        {props.label}
+        <Show when={props.hint}>
+          {(hint) => (
+            <>
+              {" "}
+              <span class="hint">{hint()}</span>
+            </>
+          )}
+        </Show>
+      </label>
+      <Show when={props.rows} fallback={<input {...control} />}>
+        {(rows) => <textarea {...control} rows={rows()} />}
+      </Show>
+    </>
+  );
+}
+
+export function App(props: { createWorker?: () => InferenceWorker }) {
+  const [draft, setDraft] = createStore({ ...defaultDraft });
+  const { view, result, busy, download, fail, start } = createInference(() =>
+    (props.createWorker ?? spawnWorker)(),
+  );
+  /** Binds a text control to its draft field. */
+  const bind = (key: TextField) => ({
+    get value() {
+      return draft[key];
+    },
+    get disabled() {
+      return busy();
+    },
+    onInput: (value: string) => setDraft(key, value),
+  });
   function submit(event: SubmitEvent) {
     event.preventDefault();
     if (busy()) return;
-    const type = questionType();
-    let question: Question;
-    if (type === "noul") {
-      const criteria = {
-        ...(falseCriterion().trim() ? { false: falseCriterion().trim() } : {}),
-        ...(trueCriterion().trim() ? { true: trueCriterion().trim() } : {}),
-      };
-      question = {
-        type,
-        instructions: instructions(),
-        ...(Object.keys(criteria).length ? { criteria } : {}),
-      };
-    } else {
-      const criteria = (type === "choice" ? choices() : scale())
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (
-        !criteria.length ||
-        (type === "choice" && new Set(criteria).size !== criteria.length)
-      ) {
-        fail(
-          type === "choice"
-            ? "Choices must be unique"
-            : "Enter at least one evaluation scale level",
-        );
-        return;
-      }
-      question = { type, instructions: instructions(), criteria };
+    const question = toQuestion(draft);
+    if (question instanceof Error) {
+      fail(question.message);
+      return;
     }
-    downloads.clear();
-    setView({ phase: "loading" });
-    try {
-      if (!worker) {
-        worker = (props.createWorker ?? createWorker)();
-        worker.onmessage = ({ data }: MessageEvent<Response>) => receive(data);
-        worker.onerror = (event) => {
-          event.preventDefault();
-          releaseWorker();
-          fail(event.message || "Failed to start inference worker");
-        };
-      }
-      const request: Request = {
-        state: state(),
-        questions: {
-          result: question,
-        },
-        backend: backend(),
-        modelUrl: new URL("./models/laya/", location.href).href,
-        wasmPaths: new URL("./ort/", location.href).href,
-      };
-      worker.postMessage(request);
-    } catch (error) {
-      releaseWorker();
-      fail(error instanceof Error ? error.message : String(error));
-    }
+    start({
+      state: draft.state,
+      questions: { result: question },
+      backend: draft.backend,
+    });
   }
   return (
     <main>
@@ -195,84 +130,67 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
         All inference runs locally without server requests.
       </p>
       <form onSubmit={submit} aria-busy={busy()}>
-        <label for="state">Input Context</label>
-        <textarea
+        <Field
           id="state"
-          rows="4"
+          label="Input Context"
+          rows={4}
           required
-          value={state()}
-          onInput={(e) => setState(e.currentTarget.value)}
-          disabled={busy()}
+          {...bind("state")}
         />
         <label for="question-type">Decision Type</label>
         <select
           id="question-type"
-          value={questionType()}
+          value={draft.type}
           disabled={busy()}
           onChange={(e) =>
-            setQuestionType(e.currentTarget.value as Question["type"])
+            setDraft("type", e.currentTarget.value as Question["type"])
           }
         >
           <option value="choice">choice · Categorical choice</option>
           <option value="score">score · Ordinal score</option>
           <option value="noul">noul · Binary verification</option>
         </select>
-        <label for="instructions">Instructions</label>
-        <input
+        <Field
           id="instructions"
+          label="Instructions"
           required
-          value={instructions()}
-          onInput={(e) => setInstructions(e.currentTarget.value)}
-          disabled={busy()}
+          {...bind("instructions")}
         />
-        <Show when={questionType() === "choice"}>
-          <label for="choices">
-            Choices <span class="hint">one per line</span>
-          </label>
-          <textarea
+        <Show when={draft.type === "choice"}>
+          <Field
             id="choices"
-            rows="3"
+            label="Choices"
+            hint="one per line"
+            rows={3}
             required
-            value={choices()}
-            onInput={(e) => setChoices(e.currentTarget.value)}
-            disabled={busy()}
+            {...bind("choices")}
           />
         </Show>
-        <Show when={questionType() === "score"}>
-          <label for="scale">
-            Evaluation Scale{" "}
-            <span class="hint">one level per line · ordered 0, 1, 2…</span>
-          </label>
-          <textarea
+        <Show when={draft.type === "score"}>
+          <Field
             id="scale"
-            rows="3"
+            label="Evaluation Scale"
+            hint="one level per line · ordered 0, 1, 2…"
+            rows={3}
             required
-            value={scale()}
-            disabled={busy()}
-            onInput={(e) => setScale(e.currentTarget.value)}
+            {...bind("scale")}
           />
         </Show>
-        <Show when={questionType() === "noul"}>
+        <Show when={draft.type === "noul"}>
           <p class="hint">
             Computes the probability that the proposition is true
           </p>
-          <label for="false-criterion">
-            False Criterion <span class="hint">optional</span>
-          </label>
-          <input
+          <Field
             id="false-criterion"
-            value={falseCriterion()}
-            disabled={busy()}
-            onInput={(e) => setFalseCriterion(e.currentTarget.value)}
+            label="False Criterion"
+            hint="optional"
+            {...bind("falseCriterion")}
           />
-          <label for="true-criterion">
-            True Criterion <span class="hint">optional</span>
-          </label>
-          <input
+          <Field
             id="true-criterion"
-            value={trueCriterion()}
-            disabled={busy()}
-            onInput={(e) => setTrueCriterion(e.currentTarget.value)}
+            label="True Criterion"
+            hint="optional"
+            {...bind("trueCriterion")}
           />
         </Show>
         <div class="actions">
@@ -284,11 +202,11 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
           </label>
           <select
             id="backend"
-            value={backend()}
-            onChange={(e) =>
-              setBackend(e.currentTarget.value as Request["backend"])
-            }
+            value={draft.backend}
             disabled={busy()}
+            onChange={(e) =>
+              setDraft("backend", e.currentTarget.value as Request["backend"])
+            }
           >
             <option value="auto">Auto · Prefer WebGPU</option>
             <option value="webgpu">WebGPU</option>
@@ -301,19 +219,21 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
         role="status"
         data-error={view().phase === "error" ? "" : undefined}
       >
-        {status(view())}
+        {status(view(), download())}
       </p>
-      <Show when={progress()}>
-        {(p) => (
+      <Show when={download()}>
+        {(bytes) => (
           <Show
-            when={p().total}
+            when={bytes().total}
             fallback={<progress aria-label="Loading model" />}
           >
-            <progress
-              aria-label="Loading model"
-              max={p().total}
-              value={p().loaded ?? 0}
-            />
+            {(total) => (
+              <progress
+                aria-label="Loading model"
+                max={total()}
+                value={bytes().loaded}
+              />
+            )}
           </Show>
         )}
       </Show>
@@ -353,9 +273,9 @@ function ResultView(props: { data: Result; previous: boolean }) {
   };
   const label = (key: string) => {
     const a = answer();
-    return a.type === "score"
-      ? `${key}: ${typeof a.legend[key] === "string" ? a.legend[key] : JSON.stringify(a.legend[key])}`
-      : key;
+    if (a.type !== "score") return key;
+    const description = a.legend[key];
+    return `${key}: ${typeof description === "string" ? description : JSON.stringify(description)}`;
   };
   return (
     <section id="result" aria-label="Inference Result">
@@ -370,7 +290,7 @@ function ResultView(props: { data: Result; previous: boolean }) {
         </span>
       </div>
       <p class="confidence">
-        Confidence <strong>{percent(answer()?.confidence ?? 0)}</strong>
+        Confidence <strong>{percent(answer().confidence)}</strong>
         <span>
           {answer().type === "noul"
             ? "Higher probability between true and false; not an accuracy score"
