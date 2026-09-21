@@ -1,6 +1,6 @@
 # 開発ガイド
 
-`@r4ai/laya-web` (リポジトリ名: `hello-jev`) の開発環境構築、モデルエクスポート、ビルド、テスト、および CI/CD デプロイの手順。
+`@r4ai/laya-web` (リポジトリ名: `laya-web`) の開発環境構築、モデルエクスポート、ビルド、テスト、および CI/CD デプロイの手順。
 
 ## 開発環境構築
 
@@ -10,10 +10,14 @@
 - **パッケージマネージャー**: `pnpm` (v11.x)
 - **Python 環境**: [`uv`](https://docs.astral.sh/uv/)（Python 本体および依存ライブラリの自動管理）
 
+`pnpm model:verify` は追加のMLX参照実装を利用するため、Apple Silicon搭載Macが必要。モデルのエクスポートと `uv run pytest` はCPUで実行できる。
+
 ### セットアップ手順
 
 ```sh
-# 1. 依存関係のインストール
+# 1. リポジトリの取得と依存関係のインストール
+git clone https://github.com/r4ai/laya-web.git
+cd laya-web
 pnpm install --frozen-lockfile
 
 # 2. モデルのエクスポート (初回必須)
@@ -27,7 +31,7 @@ pnpm dev
 
 ## モデルのエクスポートと管理
 
-Hugging Face 上の MLX チェックポイントを ONNX Runtime Web 用フォーマットに変換して使用する。
+Hugging Face 上の元の Laya チェックポイントを ONNX Runtime Web 用フォーマットに変換して使用する。
 
 ### 既定モデルの仕様
 
@@ -79,7 +83,7 @@ GitHub Actions により GitHub Pages へ自動デプロイされる（`.github/
 2. **モデル変換**
    - キャッシュ未ヒット時のみ Hugging Face からダウンロードしてエクスポートを実行
 3. **品質検証**
-   - `pnpm typecheck`、`pnpm test`（カバレッジ計測）、`pnpm build:pages` を実行
+   - `uv run --frozen pytest`、`pnpm typecheck`、`pnpm test`（カバレッジ計測）、`pnpm build:pages` を実行
 4. **配信物検査（`validate-pages.mjs`）**
    - 必須ファイル（`index.html`, `model.onnx`, `embeddings.f16.bin` 等）の存在確認
    - モデルの SHA-256 ハッシュ照合

@@ -13,7 +13,13 @@ const record = (v: unknown): v is Record<string, unknown> =>
 
 /** JSON formatting matches Python json.dumps(..., ensure_ascii=False). */
 export function serialize(value: Json): string {
-  if (Array.isArray(value)) return `[${value.map(serialize).join(", ")}]`;
+  if (Array.isArray(value))
+    return `[${Array.from(value, serialize).join(", ")}]`;
+  if (
+    record(value) &&
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+  )
+    throw new TypeError("Expected a plain JSON object");
   if (record(value))
     return `{${Object.entries(value)
       .map(([k, v]) => `${JSON.stringify(k)}: ${serialize(v as Json)}`)
@@ -135,6 +141,20 @@ export function validateConfig(value: unknown): asserts value is ModelConfig {
     (value.headMaxLength as number) >= (value.maxLength as number)
   )
     throw new TypeError("Invalid token budgets");
+  if (value.files !== undefined) {
+    if (
+      !record(value.files) ||
+      Object.values(value.files).some(
+        (file) =>
+          !record(file) ||
+          !Number.isSafeInteger(file.bytes) ||
+          (file.bytes as number) < 0 ||
+          typeof file.sha256 !== "string" ||
+          !/^[a-f0-9]{64}$/i.test(file.sha256),
+      )
+    )
+      throw new TypeError("Invalid file manifest");
+  }
   if (
     !Array.isArray(value.temperature) ||
     value.temperature.length !== 3 ||

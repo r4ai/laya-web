@@ -7,6 +7,11 @@ export async function download(
   options: LoadOptions,
   expectedBytes?: number,
 ): Promise<Uint8Array> {
+  if (
+    expectedBytes !== undefined &&
+    (!Number.isSafeInteger(expectedBytes) || expectedBytes < 0)
+  )
+    throw new TypeError(`Invalid expected size for ${file}`);
   const response = await fetch(new URL(file, base), { signal: options.signal });
   if (!response.ok)
     throw new Error(
@@ -17,8 +22,10 @@ export async function download(
     (Number(response.headers.get("content-length")) || undefined);
   const progress = (loaded: number) =>
     options.onProgress?.({ phase: "download", file, loaded, total });
-  if (!response.body || !expectedBytes) {
+  if (!response.body || expectedBytes === undefined) {
     const data = new Uint8Array(await response.arrayBuffer());
+    if (expectedBytes !== undefined && data.byteLength !== expectedBytes)
+      throw new Error(`Size mismatch for ${file}`);
     progress(data.byteLength);
     return data;
   }

@@ -1,13 +1,13 @@
 # @r4ai/laya-web
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![GitHub Pages](https://img.shields.io/badge/Demo-GitHub%20Pages-brightgreen)](https://r4ai.github.io/hello-jev/)
+[![GitHub Pages](https://img.shields.io/badge/Demo-GitHub%20Pages-brightgreen)](https://r4ai.github.io/laya-web/)
 
 [Laya-MLX](https://github.com/mizorewww/laya-mlx) の Decision モデルを ONNX Runtime Web（WebGPU / Wasm）でブラウザ内ローカル実行する TypeScript ライブラリ。
 
 LLMのような長文生成を行わず、入力テキストに対する単一選択（`choice`）・段階評価（`score`）・二値判定（`noul`）などの型付き意思決定（Typed Decisions）を高速・軽量に処理する。
 
-👉 [オンラインデモ](https://r4ai.github.io/hello-jev/)
+👉 [オンラインデモ](https://r4ai.github.io/laya-web/)
 
 ## 特徴
 
@@ -62,6 +62,8 @@ graph TD
 
 React、Vue、SolidJS、Vanilla JS など任意のフロントエンド環境で利用可能。
 
+ライブラリ自体は呼び出し元のスレッドで動作する。UIを止めないため、以下のコードはデモ同様にWeb Worker内で実行する。モデル資産と、使用する `onnxruntime-web` と同じバージョンの `.mjs` / `.wasm` をそれぞれ `/models/laya/` と `/ort/` に配信する（[設定例](https://github.com/r4ai/laya-web/blob/main/examples/minimal/vite.config.ts)）。
+
 ### 基本的な使い方
 
 ```ts
@@ -101,7 +103,10 @@ try {
   );
 
   console.log("使用バックエンド:", agent.backend);
-  console.log("部署の判定:", result.answers.department.value);
+  const department = result.answers.department;
+  if (department.type === "choice") {
+    console.log("部署の判定:", department.choice);
+  }
   console.log("確信度:", result.answers.department.confidence);
 } finally {
   // 3. リソースの解放

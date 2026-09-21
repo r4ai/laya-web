@@ -154,3 +154,23 @@ it("converts binary16 normal, subnormal, infinity and signed values", () => {
   ]);
   expect(halfToFloat(0x7e00)).toBeNaN();
 });
+
+it.each([-1, 1.5, Infinity, "3"])(
+  "rejects invalid manifest size %s",
+  (bytes) => {
+    expect(() =>
+      validateConfig({
+        ...cfg,
+        files: { "model.onnx": { bytes, sha256: "a".repeat(64) } },
+      }),
+    ).toThrow(/manifest/i);
+  },
+);
+it.each([new Date(), new Map(), new Set(), [, "x"]])(
+  "rejects non-JSON state %j",
+  (state) => {
+    expect(() =>
+      prepare(state as never, { type: "noul", instructions: "" }, tok, cfg),
+    ).toThrow(/JSON/);
+  },
+);

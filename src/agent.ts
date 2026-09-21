@@ -44,8 +44,9 @@ export class Agent {
     } catch (error) {
       return Promise.reject(error);
     }
+    const signal = options.signal;
     const task = this.tail.then(async () => {
-      options.signal?.throwIfAborted();
+      signal?.throwIfAborted();
       if (
         !snapshot.questions ||
         Array.isArray(snapshot.questions) ||
@@ -62,9 +63,9 @@ export class Agent {
       const answers: Prediction["answers"] = Object.create(null);
       let tokens = 0;
       for (const [id, question] of entries) {
-        options.signal?.throwIfAborted();
+        signal?.throwIfAborted();
         const result = await this.driver.run(question);
-        options.signal?.throwIfAborted();
+        signal?.throwIfAborted();
         answers[id] = formatAnswer(
           question,
           result.logits,

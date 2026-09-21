@@ -4,6 +4,10 @@ import { download, createTokenizer } from "../src/assets.js";
 import type { LoadProgress } from "../src/types.js";
 let base: URL;
 const server = createServer((req, res) => {
+  if (req.url === "/empty") {
+    res.writeHead(204).end();
+    return;
+  }
   if (req.url === "/missing") {
     res.writeHead(404).end();
     return;
@@ -66,3 +70,28 @@ it("rejects a tokenizer with missing special tokens", () => {
     ),
   ).toThrow();
 });
+
+it("checks an explicitly empty asset rather than ignoring its expected size", async () => {
+  await expect(
+    download(base, "ok", { modelUrl: base.href }, 0),
+  ).rejects.toThrow(/size/i);
+});
+
+it("rejects a bodyless response when bytes are required", async () => {
+  await expect(
+    download(base, "empty", { modelUrl: base.href }, 3),
+  ).rejects.toThrow(/size/i);
+});
+it("accepts an empty response when zero bytes are expected", async () => {
+  expect(
+    await download(base, "empty", { modelUrl: base.href }, 0),
+  ).toHaveLength(0);
+});
+it.each([-1, 1.5, Infinity])(
+  "rejects invalid expected size %s",
+  async (size) => {
+    await expect(
+      download(base, "ok", { modelUrl: base.href }, size),
+    ).rejects.toThrow(/size/i);
+  },
+);

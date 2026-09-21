@@ -79,3 +79,15 @@ it("aborted queued work does not run", async () => {
   ).rejects.toThrow();
   expect(driver.events).toEqual([]);
 });
+
+it("captures the cancellation signal when accepting a request", async () => {
+  const driver = new FakeDriver();
+  const agent = new Agent(cfg, tok, driver);
+  const controller = new AbortController();
+  const options: { signal?: AbortSignal } = { signal: controller.signal };
+  const result = agent.predict("", questions, options);
+  options.signal = undefined;
+  controller.abort();
+  await expect(result).rejects.toThrow();
+  expect(driver.events).toEqual([]);
+});
