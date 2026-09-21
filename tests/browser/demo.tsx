@@ -65,13 +65,13 @@ render(
           "font-size": "11px",
         }}
       >
-        <button onClick={() => worker.complete()}>成功応答</button>
+        <button onClick={() => worker.complete()}>Success Response</button>
         <button
           onClick={() =>
-            worker.emit({ type: "error", error: "テスト用の読み込み失敗" })
+            worker.emit({ type: "error", error: "Simulated load failure" })
           }
         >
-          失敗応答
+          Failure Response
         </button>
         <output id="scroll-check" style={{ display: "block" }} />
       </aside>

@@ -17,12 +17,12 @@ onmessage = async ({ data: base }: MessageEvent<string>) => {
     });
     const ready = performance.now();
     const result = await agent.predict(
-      "料金が二重に請求されています。重複分を返金してください。",
+      "I was charged twice for my subscription this month. Please issue a refund.",
       {
         result: {
           type: "choice",
-          instructions: "この問い合わせを担当する部署は？",
-          criteria: ["請求・返金", "技術サポート", "営業"],
+          instructions: "Which support department should handle this request?",
+          criteria: ["Billing & Refunds", "Technical Support", "Sales"],
         },
       },
     );

@@ -18,27 +18,28 @@ type View =
   | { phase: "running" }
   | { phase: "result" }
   | { phase: "error"; message: string };
-const initialState = "料金が二重に請求されています。重複分を返金してください。";
+const initialState =
+  "I was charged twice for my subscription this month. Please issue a refund.";
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`;
 
 function status(view: View): string {
   switch (view.phase) {
     case "idle":
-      return "初回はモデル約934 MBを読み込みます。";
+      return "First run downloads ~934 MB of model assets";
     case "running":
-      return "推論しています…";
+      return "Running inference…";
     case "error":
       return view.message;
     case "result":
-      return "完了 · 入力文はこのブラウザ内で処理しました。";
+      return "Completed · Processed entirely in this browser";
     case "loading": {
       const p = view.progress;
-      if (!p) return "準備しています…";
+      if (!p) return "Preparing…";
       if (p.phase === "fallback")
-        return "WebGPUを利用できないため、Wasmで準備しています…";
-      if (p.phase === "initialize") return "モデルを初期化しています…";
+        return "WebGPU unavailable; falling back to Wasm…";
+      if (p.phase === "initialize") return "Initializing model…";
       const mb = (n: number) => (n / 1e6).toFixed(1);
-      return `読み込み中 · ${mb(p.loaded ?? 0)}${p.total ? ` / ${mb(p.total)}` : ""} MB`;
+      return `Loading · ${mb(p.loaded ?? 0)}${p.total ? ` / ${mb(p.total)}` : ""} MB`;
     }
   }
 }
@@ -46,12 +47,14 @@ function status(view: View): string {
 export function App(props: { createWorker?: () => InferenceWorker }) {
   const [state, setState] = createSignal(initialState);
   const [instructions, setInstructions] = createSignal(
-    "この問い合わせを担当する部署は？",
+    "Which support department should handle this request?",
   );
-  const [choices, setChoices] = createSignal("請求・返金\n技術サポート\n営業");
+  const [choices, setChoices] = createSignal(
+    "Billing & Refunds\nTechnical Support\nSales",
+  );
   const [questionType, setQuestionType] =
     createSignal<Question["type"]>("choice");
-  const [scale, setScale] = createSignal("通常\n優先\n緊急");
+  const [scale, setScale] = createSignal("Normal\nElevated\nImmediate");
   const [falseCriterion, setFalseCriterion] = createSignal("");
   const [trueCriterion, setTrueCriterion] = createSignal("");
   const [backend, setBackend] = createSignal<Request["backend"]>("auto");
@@ -146,8 +149,8 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
       ) {
         fail(
           type === "choice"
-            ? "選択肢は重複しないように入力してください。"
-            : "評価尺度を1行以上入力してください。",
+            ? "Choices must be unique"
+            : "Enter at least one evaluation scale level",
         );
         return;
       }
@@ -162,7 +165,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
         worker.onerror = (event) => {
           event.preventDefault();
           releaseWorker();
-          fail(event.message || "推論用Workerを起動できませんでした。");
+          fail(event.message || "Failed to start inference worker");
         };
       }
       const request: Request = {
@@ -186,12 +189,13 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
         Laya Web<span aria-hidden="true">.</span>
       </h1>
       <p class="intro">
-        文章から、選択・評価・真偽判定。
+        Typed decisions directly from text: choice, scoring, and binary
+        verification.
         <br />
-        推論はすべて、このブラウザの中で。
+        All inference runs locally without server requests.
       </p>
       <form onSubmit={submit} aria-busy={busy()}>
-        <label for="state">文章</label>
+        <label for="state">Input Context</label>
         <textarea
           id="state"
           rows="4"
@@ -200,7 +204,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
           onInput={(e) => setState(e.currentTarget.value)}
           disabled={busy()}
         />
-        <label for="question-type">質問形式</label>
+        <label for="question-type">Decision Type</label>
         <select
           id="question-type"
           value={questionType()}
@@ -209,11 +213,11 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
             setQuestionType(e.currentTarget.value as Question["type"])
           }
         >
-          <option value="choice">choice · 選択</option>
-          <option value="score">score · 段階評価</option>
-          <option value="noul">noul · 真偽判定</option>
+          <option value="choice">choice · Categorical choice</option>
+          <option value="score">score · Ordinal score</option>
+          <option value="noul">noul · Binary verification</option>
         </select>
-        <label for="instructions">質問</label>
+        <label for="instructions">Instructions</label>
         <input
           id="instructions"
           required
@@ -223,7 +227,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
         />
         <Show when={questionType() === "choice"}>
           <label for="choices">
-            選択肢 <span class="hint">1行にひとつ</span>
+            Choices <span class="hint">one per line</span>
           </label>
           <textarea
             id="choices"
@@ -236,7 +240,8 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
         </Show>
         <Show when={questionType() === "score"}>
           <label for="scale">
-            評価尺度 <span class="hint">1行に1段階 · 上から0, 1, 2…</span>
+            Evaluation Scale{" "}
+            <span class="hint">one level per line · ordered 0, 1, 2…</span>
           </label>
           <textarea
             id="scale"
@@ -248,9 +253,11 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
           />
         </Show>
         <Show when={questionType() === "noul"}>
-          <p class="hint">質問に書いた命題が真である確率を返します。</p>
+          <p class="hint">
+            Computes the probability that the proposition is true
+          </p>
           <label for="false-criterion">
-            falseの基準 <span class="hint">任意</span>
+            False Criterion <span class="hint">optional</span>
           </label>
           <input
             id="false-criterion"
@@ -259,7 +266,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
             onInput={(e) => setFalseCriterion(e.currentTarget.value)}
           />
           <label for="true-criterion">
-            trueの基準 <span class="hint">任意</span>
+            True Criterion <span class="hint">optional</span>
           </label>
           <input
             id="true-criterion"
@@ -270,10 +277,10 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
         </Show>
         <div class="actions">
           <button type="submit" disabled={busy()}>
-            {busy() ? "実行中…" : "実行する"}
+            {busy() ? "Running…" : "Run"}
           </button>
           <label class="backend-label" for="backend">
-            実行環境
+            Execution Backend
           </label>
           <select
             id="backend"
@@ -283,7 +290,7 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
             }
             disabled={busy()}
           >
-            <option value="auto">自動 · WebGPU優先</option>
+            <option value="auto">Auto · Prefer WebGPU</option>
             <option value="webgpu">WebGPU</option>
             <option value="wasm">Wasm · CPU</option>
           </select>
@@ -300,10 +307,10 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
         {(p) => (
           <Show
             when={p().total}
-            fallback={<progress aria-label="モデルの読み込み" />}
+            fallback={<progress aria-label="Loading model" />}
           >
             <progress
-              aria-label="モデルの読み込み"
+              aria-label="Loading model"
               max={p().total}
               value={p().loaded ?? 0}
             />
@@ -316,10 +323,11 @@ export function App(props: { createWorker?: () => InferenceWorker }) {
         )}
       </Show>
       <footer>
-        <a href="https://github.com/mizorewww/laya-mlx">Laya-MLX</a>{" "}
-        をもとにしたブラウザ向け実装。
+        In-browser implementation based on{" "}
+        <a href="https://github.com/mizorewww/laya-mlx">Laya-MLX</a>.
         <br />
-        モデルの読み込み後、入力文をサーバーへ送信せずに推論します。
+        After model download, inference runs locally without sending input to
+        any server.
       </footer>
     </main>
   );
@@ -333,9 +341,9 @@ function ResultView(props: { data: Result; previous: boolean }) {
       case "choice":
         return a.choice;
       case "score":
-        return `スコア ${a.score}`;
+        return `Score ${a.score}`;
       case "noul":
-        return `真である確率 ${percent(a.noul)}`;
+        return `P(True) ${percent(a.noul)}`;
     }
   };
   const probabilities = () => {
@@ -350,9 +358,9 @@ function ResultView(props: { data: Result; previous: boolean }) {
       : key;
   };
   return (
-    <section id="result" aria-label="推論結果">
+    <section id="result" aria-label="Inference Result">
       <p class="result-version">
-        {props.previous ? "前回の結果" : "今回の結果"}
+        {props.previous ? "Previous Result" : "Latest Result"}
       </p>
       <div class="result-heading">
         <h2 id="choice">{title()}</h2>
@@ -362,11 +370,11 @@ function ResultView(props: { data: Result; previous: boolean }) {
         </span>
       </div>
       <p class="confidence">
-        確信度 <strong>{percent(answer()?.confidence ?? 0)}</strong>
+        Confidence <strong>{percent(answer()?.confidence ?? 0)}</strong>
         <span>
           {answer().type === "noul"
-            ? "trueとfalseのうち高い方の確率です。正答率ではありません。"
-            : "確率の集中度を表す指標です。正答率ではありません。"}
+            ? "Higher probability between true and false; not an accuracy score"
+            : "Probability concentration metric (normalized Shannon entropy); not an accuracy score"}
         </span>
       </p>
       <div id="probabilities">
@@ -385,7 +393,7 @@ function ResultView(props: { data: Result; previous: boolean }) {
         </For>
       </div>
       <details>
-        <summary>APIの出力</summary>
+        <summary>API Output</summary>
         <pre id="json">{JSON.stringify(props.data.result, null, 2)}</pre>
       </details>
     </section>

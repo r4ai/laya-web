@@ -40,8 +40,12 @@ const result: Response = {
     answers: {
       result: {
         type: "choice",
-        choice: "請求・返金",
-        probabilities: { "請求・返金": 0.8, 技術サポート: 0.1, 営業: 0.1 },
+        choice: "Billing & Refunds",
+        probabilities: {
+          "Billing & Refunds": 0.8,
+          "Technical Support": 0.1,
+          Sales: 0.1,
+        },
         confidence: 0.4183,
         action: { act_probability: 0.9 },
       },
@@ -80,15 +84,15 @@ it("prevents navigation and shows an error when Worker construction fails, then 
 
 it("submits current input, locks while busy, and renders confidence separately from probabilities", () => {
   const { worker } = setup();
-  fireEvent.input(screen.getByLabelText("文章"), {
-    target: { value: "返金を希望" },
+  fireEvent.input(screen.getByLabelText("Input Context"), {
+    target: { value: "I need a refund" },
   });
-  fireEvent.change(screen.getByLabelText("実行環境"), {
+  fireEvent.change(screen.getByLabelText("Execution Backend"), {
     target: { value: "wasm" },
   });
   fireEvent.click(screen.getByRole("button"));
   expect(worker.requests[0]).toMatchObject({
-    state: "返金を希望",
+    state: "I need a refund",
     backend: "wasm",
   });
   expect(screen.getByRole<HTMLButtonElement>("button").disabled).toBe(true);
@@ -101,40 +105,42 @@ it("submits current input, locks while busy, and renders confidence separately f
   expect(screen.getByRole<HTMLProgressElement>("progressbar").value).toBe(50);
   worker.emit({ type: "running" });
   expect(screen.queryByRole("progressbar")).toBeNull();
-  expect(screen.getByRole("status").textContent).toContain("推論しています");
+  expect(screen.getByRole("status").textContent).toContain("Running inference");
   worker.emit(result);
   expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(
-    "請求・返金",
+    "Billing & Refunds",
   );
   expect(screen.getByText("41.8%")).toBeTruthy();
   expect(screen.getByText("80.0%")).toBeTruthy();
-  expect(screen.getByText(/正答率ではありません/)).toBeTruthy();
+  expect(screen.getByText(/not an accuracy score/)).toBeTruthy();
   expect(screen.getByRole<HTMLButtonElement>("button").disabled).toBe(false);
-  expect(screen.getByLabelText<HTMLTextAreaElement>("文章").value).toBe(
-    "返金を希望",
-  );
+  expect(
+    screen.getByLabelText<HTMLTextAreaElement>("Input Context").value,
+  ).toBe("I need a refund");
   submit();
-  expect(screen.getByRole("region", { name: "推論結果" })).toBeTruthy();
-  expect(screen.getByText("前回の結果")).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Inference Result" })).toBeTruthy();
+  expect(screen.getByText("Previous Result")).toBeTruthy();
   expect(worker.requests).toHaveLength(2);
 });
 
-it.each(["重複\n重複", " \n "])(
+it.each(["Duplicate\nDuplicate", " \n "])(
   "rejects invalid choices %j and preserves the previous result",
   (choices) => {
     const { worker } = setup();
     submit();
     worker.emit(result);
-    fireEvent.input(screen.getByLabelText(/選択肢/), {
+    fireEvent.input(screen.getByLabelText(/Choices/i), {
       target: { value: choices },
     });
     submit();
     expect(worker.requests).toHaveLength(1);
-    expect(screen.getByRole("status").textContent).toContain("重複しない");
-    expect(screen.getByRole("region", { name: "推論結果" })).toBeTruthy();
-    expect(screen.getByText("前回の結果")).toBeTruthy();
-    fireEvent.input(screen.getByLabelText(/選択肢/), {
-      target: { value: "はい\nいいえ" },
+    expect(screen.getByRole("status").textContent).toContain("unique");
+    expect(
+      screen.getByRole("region", { name: "Inference Result" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Previous Result")).toBeTruthy();
+    fireEvent.input(screen.getByLabelText(/Choices/i), {
+      target: { value: "Yes\nNo" },
     });
     submit();
     expect(worker.requests).toHaveLength(2);
@@ -149,7 +155,7 @@ it("handles model errors without dropping the reusable Worker", () => {
   expect(worker.terminated).toBe(false);
   submit();
   worker.emit(result);
-  expect(screen.getByRole("region", { name: "推論結果" })).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Inference Result" })).toBeTruthy();
 });
 
 it.each(["crash", "send"])(
@@ -161,12 +167,14 @@ it.each(["crash", "send"])(
     render(() => <App createWorker={() => workers.shift()!} />);
     submit();
     first.emit(result);
-    const region = screen.getByRole("region", { name: "推論結果" });
+    const region = screen.getByRole("region", { name: "Inference Result" });
     first.failSend = failure === "send";
     submit();
     if (failure === "crash") first.crash();
-    expect(screen.getByRole("region", { name: "推論結果" })).toBe(region);
-    expect(screen.getByText("前回の結果")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Inference Result" })).toBe(
+      region,
+    );
+    expect(screen.getByText("Previous Result")).toBeTruthy();
     expect(first.terminated).toBe(true);
     expect(first.onmessage).toBeNull();
     expect(screen.getByRole("status").textContent).toContain(
@@ -187,9 +195,11 @@ it("shows indeterminate download, fallback and initialization states", () => {
   expect(screen.getByRole("progressbar").hasAttribute("value")).toBe(false);
   worker.emit({ type: "progress", progress: { phase: "fallback" } });
   expect(screen.queryByRole("progressbar")).toBeNull();
-  expect(screen.getByRole("status").textContent).toContain("Wasmで準備");
+  expect(screen.getByRole("status").textContent).toContain(
+    "falling back to Wasm",
+  );
   worker.emit({ type: "progress", progress: { phase: "initialize" } });
-  expect(screen.getByRole("status").textContent).toContain("初期化");
+  expect(screen.getByRole("status").textContent).toContain("Initializing");
 });
 
 it("terminates the Worker and detaches handlers when unmounted during inference", () => {
@@ -205,7 +215,7 @@ it("keeps the same result DOM and expanded details through progress, errors and 
   const { worker } = setup();
   submit();
   worker.emit(result);
-  const region = screen.getByRole("region", { name: "推論結果" });
+  const region = screen.getByRole("region", { name: "Inference Result" });
   const details = region.querySelector("details")!;
   details.open = true;
   submit();
@@ -218,20 +228,22 @@ it("keeps the same result DOM and expanded details through progress, errors and 
     { type: "error", error: "Download failed" },
   ] satisfies Response[]) {
     worker.emit(message);
-    expect(screen.getByRole("region", { name: "推論結果" })).toBe(region);
+    expect(screen.getByRole("region", { name: "Inference Result" })).toBe(
+      region,
+    );
     expect(details.open).toBe(true);
-    expect(screen.getByText("前回の結果")).toBeTruthy();
+    expect(screen.getByText("Previous Result")).toBeTruthy();
   }
   submit();
   const next = structuredClone(result);
   if (next.result.answers.result.type === "choice")
-    next.result.answers.result.choice = "営業";
+    next.result.answers.result.choice = "Sales";
   worker.emit(next);
-  expect(screen.getByRole("region", { name: "推論結果" })).toBe(region);
+  expect(screen.getByRole("region", { name: "Inference Result" })).toBe(region);
   expect(region.querySelector("details")).toBe(details);
   expect(details.open).toBe(true);
-  expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("営業");
-  expect(screen.queryByText("前回の結果")).toBeNull();
+  expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Sales");
+  expect(screen.queryByText("Previous Result")).toBeNull();
 });
 
 it("aggregates interleaved progress without double counting and resets on retry", () => {
@@ -274,26 +286,27 @@ it.each(["score", "noul"] as const)(
   "submits and renders %s questions",
   (type) => {
     const { worker } = setup();
-    fireEvent.change(screen.getByLabelText("質問形式"), {
+    fireEvent.change(screen.getByLabelText("Decision Type"), {
       target: { value: type },
     });
     if (type === "score") {
-      fireEvent.input(screen.getByLabelText(/評価尺度/), {
-        target: { value: "低い\n高い" },
+      fireEvent.input(screen.getByLabelText(/Evaluation Scale/i), {
+        target: { value: "Low\nHigh" },
       });
     } else {
-      fireEvent.input(screen.getByLabelText(/trueの基準/), {
-        target: { value: "返金が必要" },
+      fireEvent.input(screen.getByLabelText(/True Criterion/i), {
+        target: { value: "Refund required" },
       });
     }
     submit();
     expect(worker.requests[0].questions.result).toMatchObject({
       type,
-      criteria: type === "score" ? ["低い", "高い"] : { true: "返金が必要" },
+      criteria:
+        type === "score" ? ["Low", "High"] : { true: "Refund required" },
     });
-    expect(screen.getByLabelText<HTMLSelectElement>("質問形式").disabled).toBe(
-      true,
-    );
+    expect(
+      screen.getByLabelText<HTMLSelectElement>("Decision Type").disabled,
+    ).toBe(true);
     const response = structuredClone(result);
     response.result.answers.result = {
       confidence: 0.5,
@@ -302,38 +315,43 @@ it.each(["score", "noul"] as const)(
         ? {
             type,
             score: 0.75,
-            legend: { "0": "低い", "1": "高い" },
+            legend: { "0": "Low", "1": "High" },
             probabilities: { "0": 0.25, "1": 0.75 },
           }
         : { type, noul: 0.75 }),
     };
     worker.emit(response);
     expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(
-      type === "score" ? "スコア 0.75" : "真である確率 75.0%",
+      type === "score" ? "Score 0.75" : "P(True) 75.0%",
     );
-    if (type === "score") expect(screen.getByText("1: 高い")).toBeTruthy();
-    else expect(screen.getByText(/trueとfalseのうち高い方/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("質問形式"), {
+    if (type === "score") expect(screen.getByText("1: High")).toBeTruthy();
+    else
+      expect(
+        screen.getByText(/Higher probability between true and false/),
+      ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Decision Type"), {
       target: { value: "choice" },
     });
     expect(
-      screen.getByLabelText<HTMLTextAreaElement>(/選択肢/).value,
-    ).toContain("請求・返金");
+      screen.getByLabelText<HTMLTextAreaElement>(/Choices/i).value,
+    ).toContain("Billing & Refunds");
   },
 );
 
 it("validates empty score scales, accepts one level and duplicate descriptions", () => {
   const { worker } = setup();
-  fireEvent.change(screen.getByLabelText("質問形式"), {
+  fireEvent.change(screen.getByLabelText("Decision Type"), {
     target: { value: "score" },
   });
-  fireEvent.input(screen.getByLabelText(/評価尺度/), {
+  fireEvent.input(screen.getByLabelText(/Evaluation Scale/i), {
     target: { value: "\n " },
   });
   submit();
   expect(worker.requests).toHaveLength(0);
-  for (const value of ["低い", "同じ\n同じ"]) {
-    fireEvent.input(screen.getByLabelText(/評価尺度/), { target: { value } });
+  for (const value of ["Low", "Same\nSame"]) {
+    fireEvent.input(screen.getByLabelText(/Evaluation Scale/i), {
+      target: { value },
+    });
     submit();
     expect(worker.requests.at(-1)?.questions.result).toMatchObject({
       type: "score",
@@ -345,30 +363,34 @@ it("validates empty score scales, accepts one level and duplicate descriptions",
 
 it("omits optional noul criteria when blank", () => {
   const { worker } = setup();
-  fireEvent.change(screen.getByLabelText("質問形式"), {
+  fireEvent.change(screen.getByLabelText("Decision Type"), {
     target: { value: "noul" },
   });
   submit();
   expect(worker.requests[0].questions.result).toEqual({
     type: "noul",
-    instructions: "この問い合わせを担当する部署は？",
+    instructions: "Which support department should handle this request?",
   });
 });
 
 it.each([
-  ["偽の説明", "", { false: "偽の説明" }],
-  ["偽の説明", "真の説明", { false: "偽の説明", true: "真の説明" }],
+  ["False description", "", { false: "False description" }],
+  [
+    "False description",
+    "True description",
+    { false: "False description", true: "True description" },
+  ],
 ] as const)(
   "submits noul criteria %s / %s",
   (falseValue, trueValue, criteria) => {
     const { worker } = setup();
-    fireEvent.change(screen.getByLabelText("質問形式"), {
+    fireEvent.change(screen.getByLabelText("Decision Type"), {
       target: { value: "noul" },
     });
-    fireEvent.input(screen.getByLabelText(/falseの基準/), {
+    fireEvent.input(screen.getByLabelText(/False Criterion/i), {
       target: { value: falseValue },
     });
-    fireEvent.input(screen.getByLabelText(/trueの基準/), {
+    fireEvent.input(screen.getByLabelText(/True Criterion/i), {
       target: { value: trueValue },
     });
     submit();
