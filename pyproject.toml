@@ -2,14 +2,25 @@
 name = "laya-web-export"
 version = "0.1.0"
 requires-python = ">=3.11,<3.14"
-dependencies = ["torch==2.10.0", "onnx==1.20.1", "onnxruntime==1.24.4", "safetensors==0.7.0", "huggingface-hub==1.4.1", "tokenizers==0.22.2", "numpy==2.4.2", "pytest==9.0.2"]
+dependencies = [
+  "torch==2.10.0",
+  "onnx==1.20.1",
+  "onnxruntime==1.24.4",
+  "safetensors==0.7.0",
+  "huggingface-hub==1.4.1",
+  "tokenizers==0.22.2",
+  "numpy==2.4.2",
+  "pytest==9.0.2",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["scripts"]
 testpaths = ["tests/python"]
 
 [dependency-groups]
-reference = ["laya-mlx @ git+https://github.com/mizorewww/laya-mlx.git@fc1df62828a3fedf4d8229fdac1cbd85f1cdf337"]
+reference = [
+  "laya-mlx @ git+https://github.com/mizorewww/laya-mlx.git@fc1df62828a3fedf4d8229fdac1cbd85f1cdf337",
+]
 
 # Model export is CPU-only; avoid downloading CUDA runtimes on Linux CI.
 [tool.uv.sources]

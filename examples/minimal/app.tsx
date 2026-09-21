@@ -45,8 +45,9 @@ function status(view: View): string {
 
 export function App(props: { createWorker?: () => InferenceWorker }) {
   const [state, setState] = createSignal(initialState);
-  const [instructions, setInstructions] =
-    createSignal("この問い合わせを担当する部署は？");
+  const [instructions, setInstructions] = createSignal(
+    "この問い合わせを担当する部署は？",
+  );
   const [choices, setChoices] = createSignal("請求・返金\n技術サポート\n営業");
   const [questionType, setQuestionType] =
     createSignal<Question["type"]>("choice");

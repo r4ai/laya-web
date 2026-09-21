@@ -166,6 +166,8 @@ it.each([-1, 1.5, Infinity, "3"])(
     ).toThrow(/manifest/i);
   },
 );
+// A sparse array is intentionally invalid JSON input.
+// oxlint-disable-next-line no-sparse-arrays
 it.each([new Date(), new Map(), new Set(), [, "x"]])(
   "rejects non-JSON state %j",
   (state) => {

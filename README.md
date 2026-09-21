@@ -6,6 +6,7 @@
 Client-side runtime for [Laya-MLX](https://github.com/mizorewww/laya-mlx) decision models in the browser, powered by ONNX Runtime Web (WebGPU / Wasm).
 
 Unlike general generative LLMs that output free-form text, Laya performs fast, low-footprint classification over structured decision schemas (typed decisions):
+
 - Single-choice selection (`choice`)
 - Ordinal scoring (`score`)
 - Binary truth evaluation (`noul`)
@@ -123,11 +124,11 @@ try {
 
 ## Decision Types
 
-| Type | Description | `criteria` Specification | Output |
-| :--- | :--- | :--- | :--- |
-| **`choice`** | Single-label classification | Array of label strings, or `{ [label]: description }` map | Predicted label (`choice`) and probability distribution (`probabilities`) |
-| **`score`** | Ordinal evaluation on rubric scale | Array of level descriptions (0-indexed) | Expected level score (`score`), level distribution, and criteria mapping |
-| **`noul`** | Binary proposition verification | Optional `{ false?: description, true?: description }` map | Probability that proposition holds (`noul` as $P(\text{true})$) |
+| Type         | Description                        | `criteria` Specification                                   | Output                                                                    |
+| :----------- | :--------------------------------- | :--------------------------------------------------------- | :------------------------------------------------------------------------ |
+| **`choice`** | Single-label classification        | Array of label strings, or `{ [label]: description }` map  | Predicted label (`choice`) and probability distribution (`probabilities`) |
+| **`score`**  | Ordinal evaluation on rubric scale | Array of level descriptions (0-indexed)                    | Expected level score (`score`), level distribution, and criteria mapping  |
+| **`noul`**   | Binary proposition verification    | Optional `{ false?: description, true?: description }` map | Probability that proposition holds (`noul` as $P(\text{true})$)           |
 
 ## Confidence Calibration
 
@@ -138,6 +139,7 @@ $$H(P) = -\sum_{i=1}^{K} P(i) \ln P(i)$$
 $$\text{confidence} = \max\left(0, 1 - \frac{H(P)}{\ln K}\right)$$
 
 Metric behavior differs by question type:
+
 - **`choice` and `score`**
   - Evaluated against option count $K$
   - Approaches 1.0 when probabilities concentrate on a single candidate

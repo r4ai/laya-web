@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "categories": { "correctness": "error" },
+  "ignorePatterns": [
+    "node_modules/**",
+    "**/dist/**",
+    "coverage/**",
+    "artifacts/**",
+    ".venv/**",
+    "examples/minimal/public/models/**"
+  ]
+}
