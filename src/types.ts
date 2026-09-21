@@ -1,12 +1,10 @@
 /**
- * Any value that survives a JSON round trip.
+ * JSON-serializable value.
  *
  * @remarks
- * Everything the model reads — a {@link State}, a criterion description, a
- * score legend entry — must be JSON. Non-string values are serialized with the
- * same spacing as Python's `json.dumps(..., ensure_ascii=False)` so that a
- * browser prediction matches the upstream Laya reference implementation.
- * `NaN` and `Infinity` have no JSON form and are rejected at prediction time.
+ * Inputs such as {@link State} and question criteria must conform to this type.
+ * Values are serialized to match Python `json.dumps(..., ensure_ascii=False)`.
+ * Non-finite numbers (`NaN`, `Infinity`) are rejected at validation time.
  */
 export type Json =
   | null
@@ -17,15 +15,13 @@ export type Json =
   | { [key: string]: Json };
 
 /**
- * The input a decision is made about: the ticket, message, or record to judge.
+ * Input content evaluated by decision questions.
  *
  * @remarks
- * A string is tokenized as written. An object or array is serialized to JSON
- * first, so its keys become part of what the model reads — prefer descriptive
- * field names over abbreviations.
- *
- * The state is appended after the question and truncated from the end once it
- * exceeds the model's token budget, so put the decisive information first.
+ * Representation and truncation rules:
+ * - String: Tokenized directly as plain text
+ * - Object or array: Serialized to deterministic JSON before tokenization
+ * - Budget overflow: Truncated from the end when exceeding maximum token length
  *
  * @example
  * ```ts
@@ -36,17 +32,14 @@ export type Json =
 export type State = string | { [key: string]: Json } | Json[];
 
 /**
- * One typed decision to evaluate against a {@link State}.
+ * Typed decision specification evaluated against a {@link State}.
  *
  * @remarks
- * `type` selects the decision head, and therefore the shape of both `criteria`
- * and the matching {@link Answer} variant. `instructions` says what to decide;
- * it is not a prompt template, and the model never generates text from it.
- *
- * Instructions and criteria share a fixed token budget. Criteria are truncated
- * first and instructions second, so keep option descriptions short. A question
- * with more options than the budget can hold is rejected outright rather than
- * silently losing options.
+ * Evaluation rules:
+ * - Discriminant `type` determines criteria format and resulting {@link Answer} variant
+ * - Criteria and instructions share a fixed token budget
+ * - Truncation priority: criteria first, then instructions
+ * - Questions exceeding budget limit throw `RangeError` rather than dropping options
  *
  * @example
  * ```ts
@@ -68,226 +61,207 @@ export type State = string | { [key: string]: Json } | Json[];
  * };
  * ```
  *
- * @see {@link Answer} for the result each variant produces.
+ * @see {@link Answer} for matching output variants
  */
 export type Question =
   | {
-      /** Pick the single best label out of discrete candidates. */
+      /** Discrete single-label classification */
       type: "choice";
-      /** What to decide, in plain language. */
+      /** Decision goal in plain language */
       instructions: string;
       /**
-       * The candidate labels, as unique nonempty strings or as a
-       * `label -> description` map. Descriptions are rendered to the model as
-       * `"label: description"`, which helps when labels alone are terse.
+       * Candidate labels or label-to-description mapping
+       *
+       * @remarks
+       * Rendered as `"label: description"` when defined as an object.
        */
       criteria: string[] | Record<string, Json>;
     }
   | {
-      /** Grade the state against an ordered rubric. */
+      /** Ordinal grading against an ordered scale */
       type: "score";
-      /** What to grade, in plain language. */
+      /** Rubric goal in plain language */
       instructions: string;
       /**
-       * The rubric levels in ascending order, lowest first, and at least one.
-       * Index positions form the scale, so three levels score within `[0, 2]`.
+       * Ordered rubric levels in ascending order (minimum 1 level)
+       *
+       * @remarks
+       * Indices define the output score range `[0, criteria.length - 1]`.
        */
       criteria: Json[];
     }
   | {
-      /** Estimate the probability that a statement holds. */
+      /** Binary verification probability */
       type: "noul";
-      /** The statement to verify, phrased so that "true" is unambiguous. */
+      /** Statement to verify as true or false */
       instructions: string;
-      /**
-       * Optional descriptions of what each outcome means. Missing entries fall
-       * back to generic "the statement holds" / "does not hold" wording.
-       */
+      /** Optional descriptions for true and false outcomes */
       criteria?: { false?: Json; true?: Json };
     };
 
 /**
- * A batch of questions, keyed by ids you choose.
+ * Map of questions keyed by caller-defined identifiers.
  *
  * @remarks
- * The same ids come back as the keys of {@link Prediction.answers}, so pick
- * names that are stable in your code (`"department"`, `"urgency"`) rather than
- * positional indices. Every question in a batch is evaluated against the one
- * {@link State} passed alongside it.
+ * Keys match identifiers returned in {@link Prediction.answers}.
+ * All questions in a batch evaluate against the same {@link State}.
  */
 export type Questions = Record<string, Question>;
 
 /**
- * The ONNX Runtime Web execution provider actually running the model.
+ * ONNX Runtime Web execution backend.
  *
  * @remarks
- * `"webgpu"` runs on the GPU. `"wasm"` runs single-threaded SIMD WebAssembly
- * on the CPU: available everywhere, but markedly slower. Which one a load
- * settled on is readable from `Agent.backend`.
+ * Supported providers:
+ * - `"webgpu"`: Hardware-accelerated GPU execution
+ * - `"wasm"`: Single-threaded WebAssembly SIMD CPU execution
  */
 export type Backend = "webgpu" | "wasm";
 
-/** The fields every {@link Answer} carries, whatever the question type. */
+/** Common metadata included in every {@link Answer}. */
 export interface AnswerBase {
   /**
-   * How concentrated the decision is, in `[0, 1]`, rounded to four decimals.
+   * Distribution sharpness score in range `[0, 1]`, rounded to 4 decimals.
    *
    * @remarks
-   * For `choice` and `score` this is Shannon entropy normalized by the option
-   * count: `1` when the probability mass sits on one option, approaching `0`
-   * as it spreads out evenly, and a fixed `1` for a single-option question.
-   * For `noul` it is the binary margin `max(p, 1 - p)`, so it spans `[0.5, 1]`.
+   * Metric computation:
+   * - `choice` / `score`: Normalized Shannon entropy (`1` = concentrated on single option, `0` = uniform distribution)
+   * - `noul`: Binary margin `max(p, 1 - p)` in range `[0.5, 1]`
    *
-   * Confidence describes the sharpness of the distribution, not correctness —
-   * a confidently wrong answer still scores near `1`. Use it to route
-   * uncertain cases to a human, not as an accuracy estimate.
+   * Measures probability concentration rather than ground-truth correctness.
    */
   confidence: number;
   /**
-   * The checkpoint's reinforcement-learning action head.
+   * Reinforcement learning action head output.
    *
    * @remarks
-   * `act_probability` is the softmax probability of the head's first class,
-   * in `[0, 1]`, rounded to four decimals. It is carried through for parity
-   * with the upstream reference implementation; this library never acts on it.
+   * `act_probability` represents the first-class softmax probability in `[0, 1]`.
+   * Retained for compatibility with reference implementations.
    */
   action: { act_probability: number };
 }
 
 /**
- * The result for one {@link Question}, discriminated by `type`.
+ * Result of an evaluated question, discriminated by `type`.
  *
  * @remarks
- * `type` always mirrors the question that produced it, so narrowing on it is
- * safe and is the intended way to read an answer.
+ * Discriminant `type` matches the corresponding {@link Question.type}.
  *
  * @example
  * ```ts
  * const answer = prediction.answers.department;
- * if (answer.type === "choice") console.log(answer.choice, answer.confidence);
+ * if (answer.type === "choice") {
+ *   console.log(answer.choice, answer.confidence);
+ * }
  * ```
  *
- * @see {@link AnswerBase} for `confidence` and `action`, shared by all variants.
+ * @see {@link AnswerBase} for shared base properties
  */
 export type Answer = AnswerBase &
   (
     | {
         type: "choice";
-        /** The highest-probability label, taken verbatim from `criteria`. */
+        /** Highest-probability candidate label from `criteria` */
         choice: string;
-        /** Calibrated probability per label; sums to `1` before rounding. */
+        /** Calibrated probabilities per label (normalized to sum to 1.0) */
         probabilities: Record<string, number>;
       }
     | {
         type: "score";
         /**
-         * The probability-weighted mean level, so a fractional value between
-         * `0` and `criteria.length - 1` rather than a single chosen level.
+         * Expected score calculated as probability-weighted mean level.
+         * Fractional value in range `[0, criteria.length - 1]`.
          */
         score: number;
-        /** Maps each level index, as a string, back to its rubric criterion. */
+        /** Map of string level indices to original rubric criteria */
         legend: Record<string, Json>;
-        /** Calibrated probability per level index, keyed as `"0"`, `"1"`, … */
+        /** Calibrated probabilities keyed by level index */
         probabilities: Record<string, number>;
       }
     | {
         type: "noul";
-        /** Calibrated probability that the statement holds, in `[0, 1]`. */
+        /** Calibrated probability that the statement holds in range `[0, 1]` */
         noul: number;
       }
   );
 
-/** Everything one `Agent.predict` call returns. */
+/** Result returned by {@link Agent.predict}. */
 export interface Prediction {
-  /** Identifies the decision model that produced these answers. */
+  /** Model identifier */
   model: "laya-rl-agent";
-  /** One {@link Answer} per question, under the ids you supplied. */
+  /** Evaluation results mapped by question identifier */
   answers: Record<string, Answer>;
   /**
-   * Tokens consumed by the batch.
+   * Token usage metrics for the evaluated batch.
    *
    * @remarks
-   * `input_tokens` sums the encoded length of every question in the batch,
-   * including the shared state repeated per question. `output_tokens` is
-   * always `0`: a typed decision reads logits and generates no text.
+   * - `input_tokens`: Total tokens across all questions (state tokens repeated per question)
+   * - `output_tokens`: Always `0` (classification outputs produce no text tokens)
    */
   usage: { input_tokens: number; output_tokens: 0 };
 }
 
-/** Options for `load`. */
+/** Configuration options for {@link load}. */
 export interface LoadOptions {
-  /** Directory produced by the exporter, served over HTTP(S). */
+  /** Base URL of exported model directory served over HTTP(S) */
   modelUrl: string;
   /**
-   * Which execution provider to use.
+   * Preferred execution backend.
    *
    * @remarks
-   * Auto tries WebGPU initialization, then creates a WASM session if it fails,
-   * reporting a `"fallback"` progress event on the way. Passing `"webgpu"`
-   * explicitly turns that failure into a rejection instead.
+   * Provider resolution:
+   * - `"auto"`: Attempts WebGPU; falls back to WASM on failure with a `"fallback"` event
+   * - `"webgpu"`: Requires WebGPU; rejects if unavailable
+   * - `"wasm"`: Uses WebAssembly directly
    *
    * @defaultValue `"auto"`
    */
   backend?: Backend | "auto";
   /**
-   * Directory containing ONNX Runtime's matching .wasm and .mjs files.
+   * Directory containing ONNX Runtime `.wasm` and `.mjs` assets.
    *
    * @remarks
-   * Needed when those binaries are not resolvable from the page's own origin,
-   * which is the usual case for a bundled app. ONNX Runtime keeps this setting
-   * process-wide, so the last load to set it wins.
+   * Required when WASM binaries cannot be resolved from host origin.
+   * Applies globally to `ort.env.wasm.wasmPaths`.
    */
   wasmPaths?: string;
   /**
-   * Cancels the download and session creation.
+   * Signal to abort asset downloads and session creation.
    *
    * @remarks
-   * Aborting rejects the `load` promise with the signal's reason and
-   * releases any session that had already been created, so no cleanup is left
-   * to the caller.
+   * Releases intermediate session allocations before rejecting.
    */
   signal?: AbortSignal;
   /**
-   * Called as assets download and the session initializes.
+   * Progress callback invoked during asset download and session setup.
    *
    * @remarks
-   * Every file in the manifest is announced with `loaded: 0` before any bytes
-   * arrive, so a progress bar can show a stable total from the first event.
-   * Throwing from this callback fails the load.
+   * Fires initial `loaded: 0` event for all manifest assets before transfer.
    */
   onProgress?: (event: LoadProgress) => void;
 }
 
-/**
- * A single step reported to {@link LoadOptions.onProgress}.
- *
- * @remarks
- * Which fields are populated depends on `phase`, so treat the optional ones as
- * genuinely absent rather than assuming they are always present.
- */
+/** Progress notification emitted to {@link LoadOptions.onProgress}. */
 export interface LoadProgress {
   /**
-   * `"download"` while fetching model assets, `"initialize"` while ONNX
-   * Runtime builds the session, and `"fallback"` once when WebGPU failed and
-   * WASM is being used instead.
+   * Current loading phase:
+   * - `"download"`: Transferring model asset files
+   * - `"initialize"`: Constructing ONNX Runtime session
+   * - `"fallback"`: Switching from WebGPU to WASM fallback
    */
   phase: "download" | "initialize" | "fallback";
-  /** The asset being downloaded, relative to `modelUrl`. Download phase only. */
+  /** Relative asset file path (download phase only) */
   file?: string;
-  /** Bytes received for `file` so far. Download phase only. */
+  /** Transferred byte count (download phase only) */
   loaded?: number;
-  /**
-   * Expected size of `file`, from the model manifest or the `Content-Length`
-   * header. Absent when the server reports neither.
-   */
+  /** Total expected byte count from manifest or Content-Length (download phase only) */
   total?: number;
-  /** Human-readable detail, currently the reason WebGPU was abandoned. */
+  /** Informational diagnostic message (e.g. fallback reason) */
   message?: string;
 }
 
 /**
- * The tokenizer surface the runtime needs, reduced to the special token ids
- * and an encode call.
+ * Minimal tokenizer interface required by runtime.
  *
  * @internal
  */
@@ -300,7 +274,7 @@ export interface Tokenizer {
 }
 
 /**
- * The validated contents of the exporter's `config.json`.
+ * Validated schema for model `config.json`.
  *
  * @internal
  */
@@ -316,8 +290,7 @@ export interface ModelConfig {
 }
 
 /**
- * One question encoded into the tensors the graph consumes, plus the labels
- * needed to turn its logits back into an {@link Answer}.
+ * Encoded tensor payload and metadata for model inference.
  *
  * @internal
  */

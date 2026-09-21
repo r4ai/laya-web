@@ -103,35 +103,25 @@ async function createSession(
 }
 
 /**
- * Load a self-hosted Laya checkpoint. No model code or remote inference is
- * executed.
+ * Loads a Laya model checkpoint into browser memory.
  *
  * @remarks
- * Downloads the exporter's output from {@link LoadOptions.modelUrl}, verifies
- * the manifest, and creates an ONNX Runtime Web session — two assets at a time,
- * so a failure cancels the rest instead of finishing a 500 MB download nobody
- * needs. Only data is fetched: the ONNX graph is executed by ONNX Runtime, and
- * nothing from the checkpoint runs as code. State and questions never leave the
- * browser.
+ * Runtime characteristics:
+ * - Downloads assets from `options.modelUrl` (~900 MB total)
+ * - Verifies manifest integrity and file sizes
+ * - Initializes ONNX Runtime Web session (WebGPU with WASM fallback)
+ * - Executes entirely client-side without remote server calls
+ * - Operates in either main thread or Web Worker
  *
- * The assets total roughly 900 MB, so load once and keep the {@link Agent}
- * alive. Hosting it in a dedicated Web Worker keeps tensor work off the UI
- * thread; the loader itself runs in either context.
+ * Global environment configuration:
+ * - Sets `ort.env.wasm.numThreads` to `1`
+ * - Applies `options.wasmPaths` to ONNX Runtime environment
  *
- * ONNX Runtime's WASM settings are process-wide. This sets `numThreads` to `1`
- * on every call and applies {@link LoadOptions.wasmPaths} when given, so the
- * last load wins for a page that loads several models.
- *
- * @param options - Where the model lives and how to run it. `modelUrl` is the
- * only required field.
- * @returns An agent bound to whichever backend initialization settled on,
- * readable from {@link Agent.backend}.
- * @throws TypeError if `modelUrl` is missing, the backend name is unknown, or
- * the checkpoint's `config.json` is not a valid `laya-web-v1` export.
- * @throws Error if an asset cannot be fetched, arrives at the wrong size, or
- * disagrees with the manifest; the message names the file.
- * @throws The abort reason if `signal` fires. Any session created in the
- * meantime is released first.
+ * @param options - Checkpoint location and runtime configuration
+ * @returns Initialized {@link Agent} instance
+ * @throws TypeError - Missing `modelUrl`, invalid backend, or malformed config
+ * @throws Error - Asset download failure, size mismatch, or manifest corruption
+ * @throws Error - Operation aborted via `options.signal`
  *
  * @example
  * ```ts
@@ -149,7 +139,7 @@ async function createSession(
  * console.log("Running on", agent.backend);
  * ```
  *
- * @see {@link Agent.dispose} — release the session when you are done with it.
+ * @see {@link Agent.dispose}
  */
 export async function load(options: LoadOptions): Promise<Agent> {
   if (!options.modelUrl) throw new TypeError("modelUrl is required");

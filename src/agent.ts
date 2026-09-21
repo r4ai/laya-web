@@ -10,38 +10,33 @@ import type {
 } from "./types.js";
 
 /**
- * The small inference boundary keeps model execution separate from the Laya
- * protocol.
+ * Backend driver abstraction for tensor execution.
  *
  * @remarks
- * {@link Agent} owns tokenization, calibration, and answer formatting; a driver
- * owns only tensor execution. The runtime ships an ONNX Runtime Web
- * implementation, and tests substitute their own.
+ * Separates inference execution from tokenization, calibration, and formatting.
  *
  * @internal
  */
 export interface Driver {
-  /** The execution provider this driver actually obtained. */
+  /** Execution provider used by the driver */
   readonly backend: Backend;
-  /** Run one encoded question and return its raw decision and action logits. */
+  /** Evaluates an encoded question and returns raw decision and action logits */
   run(
     question: PreparedQuestion,
   ): Promise<{ logits: number[]; action: number[] }>;
-  /** Release the session and any retained weights. */
+  /** Releases session resources and allocated weights */
   dispose(): Promise<void>;
 }
 
 /**
- * A loaded Laya model, ready to answer typed decisions entirely in the browser.
+ * Loaded Laya model instance for local typed-decision inference.
  *
  * @remarks
- * Instances come from `load`; the constructor is not part of the public
- * API. One agent owns an ONNX session and a few hundred megabytes of weights,
- * so load it once, share it across the app — a dedicated Web Worker is the
- * recommended home — and {@link Agent.dispose | dispose} of it when done.
- *
- * The agent holds no conversation state. Each {@link Agent.predict | predict}
- * call is independent, and nothing from one call influences the next.
+ * Created via {@link load}. Retains active inference session and weights:
+ * - Load once and reuse across the application
+ * - Execute inside a Web Worker to avoid blocking UI threads
+ * - Stateless across {@link Agent.predict} calls
+ * - Release resources via {@link Agent.dispose} when finished
  *
  * @example
  * ```ts
@@ -50,7 +45,9 @@ export interface Driver {
  *   const { answers } = await agent.predict("Refund me, I was charged twice.", {
  *     refund: { type: "noul", instructions: "Does the user demand a refund?" },
  *   });
- *   if (answers.refund.type === "noul") console.log(answers.refund.noul);
+ *   if (answers.refund.type === "noul") {
+ *     console.log(answers.refund.noul);
+ *   }
  * } finally {
  *   await agent.dispose();
  * }
@@ -58,12 +55,10 @@ export interface Driver {
  */
 export class Agent {
   /**
-   * The execution provider this agent ended up on.
+   * Active execution provider resolved during initialization.
    *
    * @remarks
-   * Resolved once at load time and fixed thereafter. Worth reporting in a
-   * diagnostics panel: `"wasm"` explains an otherwise puzzling slowdown when
-   * WebGPU was unavailable and `LoadOptions.backend` was `"auto"`.
+   * Fixed after load. Value is `"webgpu"` or `"wasm"`.
    */
   readonly backend: Backend;
   private tail: Promise<unknown> = Promise.resolve();
@@ -77,50 +72,42 @@ export class Agent {
   }
 
   /**
-   * Answer a batch of typed decisions about one state.
+   * Evaluates a batch of typed decisions against a shared input state.
    *
    * @remarks
-   * Questions run sequentially to bound browser memory, and calls are
-   * serialized per agent: concurrent calls queue rather than overlap, so a
-   * second call waits out the first. A rejected call does not poison the queue.
+   * Execution behavior:
+   * - Sequential question evaluation within a batch to bound memory
+   * - Serialized batch calls per agent instance (concurrent calls queue)
+   * - Deep-cloned arguments via `structuredClone` on entry
+   * - Full batch validation and encoding before device execution
    *
-   * `state` and `questions` are deep-cloned on entry, so later mutation of
-   * your own objects cannot affect a queued call — and values that
-   * `structuredClone` refuses, such as functions or class instances, reject
-   * immediately.
-   *
-   * Every question is validated and encoded before any inference starts, so a
-   * malformed question fails the whole batch without wasting GPU work.
-   *
-   * @param state - The input all questions in this batch are judged against.
-   * @param questions - Questions keyed by ids that reappear in the result. An
-   * empty object is valid and yields an empty `answers`.
-   * @param options - `signal` cancels the call. It is checked when the job
-   * starts and between questions, so an abort while queued skips the work
-   * entirely, but it does not interrupt an inference already running on the
-   * device.
-   * @returns The answers, keyed by your ids, plus token usage for the batch.
-   * @throws TypeError if `questions` is not a plain object, or if a question or
-   * the state is malformed.
-   * @throws RangeError if a question has more options than the model's token
-   * budget can hold.
-   * @throws Error if the agent has been disposed, or `signal`'s abort reason if
-   * the call was cancelled.
+   * @param state - Target input evaluated by all questions in the batch
+   * @param questions - Questions mapped by caller-defined identifier
+   * @param options - Optional settings for inference execution
+   *   - `signal`: AbortSignal checked before and between questions
+   * @returns Batch predictions mapped by question identifier, plus token usage
+   * @throws TypeError - Invalid input state or malformed question definition
+   * @throws RangeError - Question option count exceeds token budget
+   * @throws Error - Agent disposed, or operation aborted via `signal`
    *
    * @example
    * ```ts
-   * const { answers, usage } = await agent.predict(ticket, {
-   *   department: {
-   *     type: "choice",
-   *     instructions: "Which team should handle this?",
-   *     criteria: ["Billing", "Technical", "Sales"],
+   * const { answers, usage } = await agent.predict(
+   *   ticket,
+   *   {
+   *     department: {
+   *       type: "choice",
+   *       instructions: "Which team should handle this?",
+   *       criteria: ["Billing", "Technical", "Sales"],
+   *     },
+   *     urgency: {
+   *       type: "score",
+   *       instructions: "How urgent is this ticket?",
+   *       criteria: ["Normal", "Elevated", "Immediate"],
+   *     },
    *   },
-   *   urgency: {
-   *     type: "score",
-   *     instructions: "How urgent is this ticket?",
-   *     criteria: ["Normal", "Elevated", "Immediate"],
-   *   },
-   * }, { signal: AbortSignal.timeout(30_000) });
+   *   { signal: AbortSignal.timeout(30_000) },
+   * );
    *
    * if (answers.department.type === "choice") {
    *   console.log(answers.department.choice, answers.department.confidence);
@@ -128,7 +115,7 @@ export class Agent {
    * console.log(`${usage.input_tokens} tokens`);
    * ```
    *
-   * @see `Question` for how to phrase each decision type.
+   * @see {@link Question} for decision schema definitions
    */
   predict(
     state: State,
@@ -184,21 +171,15 @@ export class Agent {
   }
 
   /**
-   * Reject new work, finish accepted requests, then release model resources.
-   * Idempotent.
+   * Drains pending requests and releases model resources.
    *
    * @remarks
-   * Requests already queued still run to completion, so pending
-   * {@link Agent.predict | predict} promises resolve normally — this drains the
-   * agent rather than cancelling it. Use an `AbortSignal` on the individual
-   * calls if you need them to stop early.
+   * Lifecycle behavior:
+   * - Idempotent (subsequent calls return the existing promise)
+   * - Queued `predict` calls complete before session release
+   * - New `predict` calls reject immediately
    *
-   * After the first call the agent is permanently closed: further `predict`
-   * calls reject with `Agent is disposed`, and repeat `dispose` calls return
-   * the same promise instead of releasing twice. Not disposing leaks the ONNX
-   * session and its weights for the lifetime of the page or worker.
-   *
-   * @returns A promise that settles once the session and weights are released.
+   * @returns Promise resolving when session and weights are released
    *
    * @example
    * ```ts

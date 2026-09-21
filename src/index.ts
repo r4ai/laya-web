@@ -1,18 +1,15 @@
 /**
- * Client-side inference for Laya typed-decision models, running entirely in
- * the browser on ONNX Runtime Web.
+ * Browser inference engine for Laya typed-decision models using ONNX Runtime Web.
  *
  * @remarks
- * Laya evaluates structured decisions over input state without generating
- * free-form text. Three decision types are available, selected per question:
- * `choice` picks a label out of discrete candidates, `score` grades against an
- * ordered rubric, and `noul` estimates the probability that a statement holds.
- * Every answer carries a calibrated `confidence` for filtering uncertain
- * cases.
+ * Evaluates structured decisions over input states without text generation:
+ * - `choice`: Selects the single best label from discrete candidates
+ * - `score`: Grades input against an ordered numeric rubric
+ * - `noul`: Estimates the probability that a statement holds
  *
- * Start at {@link load}, which fetches a self-hosted checkpoint and returns an
- * {@link Agent}. The agent answers batches of {@link Questions} about a
- * {@link State} and must be disposed when finished.
+ * Call {@link load} to initialize an {@link Agent} from a model checkpoint.
+ * Call {@link Agent.predict} to evaluate questions against an input {@link State}.
+ * Call {@link Agent.dispose} when finished to release runtime resources.
  *
  * @example
  * ```ts
@@ -20,11 +17,11 @@
  *
  * const agent = await load({ modelUrl: "/models/laya/", wasmPaths: "/ort/" });
  * try {
- *   const { answers } = await agent.predict(ticketText, {
+ *   const { answers } = await agent.predict("Payment failed twice.", {
  *     department: {
  *       type: "choice",
  *       instructions: "Which support department should handle this request?",
- *       criteria: ["Billing & Refunds", "Technical Support", "Sales"],
+ *       criteria: ["Billing", "Technical Support", "Sales"],
  *     },
  *   });
  *   if (answers.department.type === "choice") {
