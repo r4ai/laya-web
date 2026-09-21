@@ -1,6 +1,6 @@
 {
   "name": "@r4ai/laya-web",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Laya typed decisions in the browser with ONNX Runtime Web",
   "type": "module",
   "license": "Apache-2.0",
