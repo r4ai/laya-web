@@ -1,104 +1,106 @@
-# 開発ガイド
+# Development Guide
 
-`@r4ai/laya-web` (リポジトリ名: `laya-web`) の開発環境構築、モデルエクスポート、ビルド、テスト、および CI/CD デプロイの手順。
+Engineering guide for developing, building, exporting models, testing, and deploying `@r4ai/laya-web`.
 
-## 開発環境構築
+## Prerequisites
 
-### 必要なツール
+- **Node.js**: `v22.12.0` or higher
+- **Package Manager**: `pnpm` (v11.x)
+- **Python Environment**: [`uv`](https://docs.astral.sh/uv/) for Python and virtual environment management
 
-- **Node.js**: `v22.12.0` 以上
-- **パッケージマネージャー**: `pnpm` (v11.x)
-- **Python 環境**: [`uv`](https://docs.astral.sh/uv/)（Python 本体および依存ライブラリの自動管理）
+> [!NOTE]
+> Running `pnpm model:verify` requires an Apple Silicon Mac to execute the MLX reference implementation. Model export via `pnpm model:export` and PyTorch tests via `uv run pytest` run on standard CPU architectures.
 
-`pnpm model:verify` は追加のMLX参照実装を利用するため、Apple Silicon搭載Macが必要。モデルのエクスポートと `uv run pytest` はCPUで実行できる。
-
-### セットアップ手順
+## Quickstart
 
 ```sh
-# 1. リポジトリの取得と依存関係のインストール
+# 1. Clone repository and install dependencies
 git clone https://github.com/r4ai/laya-web.git
 cd laya-web
 pnpm install --frozen-lockfile
 
-# 2. モデルのエクスポート (初回必須)
+# 2. Export base model checkpoint (required on initial setup)
 pnpm model:export
 
-# 3. 開発サーバーの起動
+# 3. Start local development server
 pnpm dev
 ```
 
-起動後、ターミナルに表示される URL（標準: `http://127.0.0.1:5173/`）へブラウザからアクセスして動作を確認する。
+Navigate to `http://127.0.0.1:5173/` in your browser to inspect the application.
 
-## モデルのエクスポートと管理
+## Model Export & Management
 
-Hugging Face 上の元の Laya チェックポイントを ONNX Runtime Web 用フォーマットに変換して使用する。
+The exporter converts Hugging Face Laya checkpoints into partitioned assets optimized for browser streaming and execution.
 
-### 既定モデルの仕様
+### Default Checkpoint Specification
 
-- **モデル名**: `convaiinnovations/laya-multilingual`
-- **リビジョン**: `052592a15d198d9ad47da779604259b10b47b7aa`
-- **ダウンロードサイズ**: 約 644 MB
-- **変換後出力サイズ**: 約 934 MB (`examples/minimal/public/models/laya/`)
+- **Model ID**: `convaiinnovations/laya-multilingual`
+- **Revision**: `052592a15d198d9ad47da779604259b10b47b7aa`
+- **Download Size**: ~644 MB
+- **Exported Output Size**: ~934 MB (`examples/minimal/public/models/laya/`)
 
-### 出力先の変更と再変換
+### Export Customization
 
-出力先ディレクトリが既に存在する場合、誤上書きを防ぐためエラーが発生する。
-別フォルダへ出力する場合は以下のコマンドを実行する。
+To prevent accidental overwrites, the export script aborts if the destination directory already exists.
+
+To export to an alternate directory:
 
 ```sh
-uv run python scripts/export_model.py --output /path/to/new-model
+uv run python scripts/export_model.py --output /path/to/custom-model
 ```
 
-別の ModernBERT 系 Laya チェックポイントを指定する場合は `--source` および `--revision` オプションを使用する（動作検証済みは既定の多言語版のみ）。
+Use `--source` and `--revision` to specify alternative ModernBERT-based Laya checkpoints. Official validation targets the default multilingual checkpoint.
 
-## コマンドリファレンス
+## Command Reference
 
-### 開発・検証コマンド
+### Development and Quality Assurance
 
-| コマンド | 内容 |
+| Command | Description |
 | :--- | :--- |
-| `pnpm typecheck` | TypeScript の型チェック |
-| `pnpm test` | Vitest による単体・結合テスト（V8 カバレッジ付き） |
-| `uv run pytest` | PyTorch / ONNX 間のロジット一致検証 |
-| `pnpm model:verify` | MLX FP32 CPU 参照値とエクスポートモデルの出力照合 |
-| `pnpm test:browser` | ブラウザ（WebGPU / Wasm）実機検証テストハブの起動 |
+| `pnpm typecheck` | Run TypeScript compiler checks without emitting files |
+| `pnpm test` | Run Vitest unit and integration suites with V8 coverage |
+| `uv run pytest` | Validate logit parity between PyTorch and ONNX models |
+| `pnpm model:verify` | Compare exported model outputs against MLX FP32 CPU reference values |
+| `pnpm test:browser` | Launch browser test harness for WebGPU and Wasm verification |
 
-### ビルドコマンド
+### Build and Distribution
 
-| コマンド | 内容 |
+| Command | Description |
 | :--- | :--- |
-| `pnpm build` | ライブラリ本体のビルド（`dist/` へ TypeScript 型定義と ESM を出力） |
-| `pnpm build:demo` | デモアプリのビルド（`examples/minimal/dist/`） |
-| `pnpm build:pages` | GitHub Pages 公開用の検証付きビルド |
-| `pnpm pack` | ローカル検証用の npm パッケージ（`.tgz`）作成 |
+| `pnpm build` | Compile library source to `dist/` with ESM bundles and TypeScript definitions |
+| `pnpm build:demo` | Build the SolidJS demo application in `examples/minimal/dist/` |
+| `pnpm build:pages` | Build the GitHub Pages distribution with automated asset validation |
+| `pnpm pack` | Package library into a `.tgz` archive for local npm verification |
 
-## GitHub Pages デプロイと CI/CD
+## CI/CD Pipeline & GitHub Pages
 
-GitHub Actions により GitHub Pages へ自動デプロイされる（`.github/workflows/pages.yml`）。
+Automated workflows test, validate, and deploy the demo application to GitHub Pages on pushes to `main` (`.github/workflows/pages.yml`).
 
-### CI/CD パイプラインの処理手順
+### Workflow Steps
 
-1. **キャッシュ確認**
-   - 変換スクリプトと Python 依存のハッシュをキーに変換済みモデルを取得
-2. **モデル変換**
-   - キャッシュ未ヒット時のみ Hugging Face からダウンロードしてエクスポートを実行
-3. **品質検証**
-   - `uv run --frozen pytest`、`pnpm typecheck`、`pnpm test`（カバレッジ計測）、`pnpm build:pages` を実行
-4. **配信物検査（`validate-pages.mjs`）**
-   - 必須ファイル（`index.html`, `model.onnx`, `embeddings.f16.bin` 等）の存在確認
-   - モデルの SHA-256 ハッシュ照合
-   - 全体サイズの上限検証（1 GB / 1,000,000,000 bytes 以下）
-   - ONNX Runtime Web モジュールの依存検証
-5. **デプロイ**
-   - すべての検証をパスした場合のみ GitHub Pages へ自動公開
+1. **Cache Verification**
+   - Restores converted model artifacts using cache keys derived from Python dependencies and export scripts
+2. **Model Conversion**
+   - Downloads checkpoint from Hugging Face and exports ONNX assets only on cache miss
+3. **Quality Validation**
+   - Runs `uv run --frozen pytest`, `pnpm typecheck`, and `pnpm test` with code coverage thresholds
+4. **Distribution Asset Inspection (`scripts/validate-pages.mjs`)**
+   - Validates existence of required entrypoints (`index.html`, `model.onnx`, `embeddings.f16.bin`)
+   - Verifies SHA-256 integrity hashes against `config.json` manifests
+   - Enforces overall distribution size limit of 1,000,000,000 bytes (1 GB)
+   - Verifies presence of all ONNX Runtime Web helper binaries required by the application bundle
+5. **Deployment**
+   - Publishes verified assets to GitHub Pages
 
-### ローカルでの Pages ビルド検証
+### Validating Pages Build Locally
+
+Run the complete build and verification pipeline locally:
 
 ```sh
 pnpm build:pages
 ```
 
-## 関連ドキュメント
+## Related Documents
 
-- [README.md](../README.md): プロジェクト概要とライブラリの使用方法
-- [docs/validation.md](validation.md): 検証仕様と品質保証ガイド
+- [README.md](../README.md): Project overview and client API guide
+- [docs/validation.md](validation.md): Verification specifications and test matrices

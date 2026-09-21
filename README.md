@@ -3,36 +3,42 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![GitHub Pages](https://img.shields.io/badge/Demo-GitHub%20Pages-brightgreen)](https://r4ai.github.io/laya-web/)
 
-[Laya-MLX](https://github.com/mizorewww/laya-mlx) の Decision モデルを ONNX Runtime Web（WebGPU / Wasm）でブラウザ内ローカル実行する TypeScript ライブラリ。
+Client-side runtime for [Laya-MLX](https://github.com/mizorewww/laya-mlx) decision models in the browser, powered by ONNX Runtime Web (WebGPU / Wasm).
 
-LLMのような長文生成を行わず、入力テキストに対する単一選択（`choice`）・段階評価（`score`）・二値判定（`noul`）などの型付き意思決定（Typed Decisions）を高速・軽量に処理する。
+Unlike general generative LLMs that output free-form text, Laya performs fast, low-footprint classification over structured decision schemas (typed decisions):
+- Single-choice selection (`choice`)
+- Ordinal scoring (`score`)
+- Binary truth evaluation (`noul`)
 
-👉 [オンラインデモ](https://r4ai.github.io/laya-web/)
+[Live Demo](https://r4ai.github.io/laya-web/)
 
-## 特徴
+## Features
 
-- 🔒 **完全ローカル・サーバーレス実行**
-  - 外部 API や推論サーバー不要
-  - データのプライバシーを保護
-  - 通信コストや API レート制限を回避
-- ⚡ **Web Worker による快適な UI**
-  - 推論処理をバックグラウンドで実行
-  - メインスレッドの描画やユーザー操作を阻害しない設計
-- 🚀 **WebGPU / Wasm の自動選択**
-  - 対応環境では WebGPU で高速化
-  - 非対応環境では Wasm へ自動フォールバック
-- 🎯 **確信度（Confidence）付きの型付き出力**
-  - 予測値と同時にエントロピーベースの確信度を算出
-  - 信頼度に応じた条件分岐が容易
+- Fully local execution
+  - Zero external API dependencies
+  - Total client-side data privacy
+  - Zero network latency or API rate limits
+- Web Worker architecture
+  - Inference executes off the main thread
+  - Preserves responsive 60fps UI rendering and interaction
+- Hardware acceleration with automatic fallback
+  - Uses WebGPU where supported
+  - Falls back to single-threaded SIMD WebAssembly (Wasm) automatically
+- Calibrated confidence metrics
+  - Normalized entropy-based confidence score (0.0 to 1.0)
+  - Clear separation between class probabilities and decision certainty
+- Memory-efficient embedding lookup
+  - FP16 embedding table stored in CPU memory
+  - Avoids WebGPU storage buffer limits on large vocabulary matrices
 
-## アーキテクチャ
+## Architecture
 
-メインスレッドの応答性を保ちつつ、ブラウザのハードウェアリソースを最大限活用する構成をとる。
+The runtime separates UI orchestration from tensor execution through a dedicated Web Worker:
 
 ```mermaid
 graph TD
-    subgraph MainThread ["メインスレッド (UI)"]
-        App["Web アプリケーション"]
+    subgraph MainThread ["Main Thread (UI)"]
+        App["Web Application"]
         Agent["@r4ai/laya-web Agent"]
     end
 
@@ -42,99 +48,107 @@ graph TD
         ORT["ONNX Runtime Web"]
     end
 
-    subgraph ExecProvider ["推論バックエンド"]
-        WebGPU["WebGPU (推奨)"]
-        Wasm["Wasm (SIMD 1-thread)"]
+    subgraph ExecProvider ["Execution Backends"]
+        WebGPU["WebGPU (Preferred)"]
+        Wasm["Wasm (SIMD Fallback)"]
     end
 
     App <-->|predict / load| Agent
     Agent <-->|postMessage| Driver
     Driver --> CPUEmb
     CPUEmb --> ORT
-    ORT -->|自動選択| WebGPU
-    ORT -->|フォールバック| Wasm
+    ORT -->|Primary| WebGPU
+    ORT -->|Fallback| Wasm
 ```
 
 > [!NOTE]
-> 多言語モデルの巨大な埋め込み表は WebGPU のメモリ上限を超えるため、FP16 埋め込み表 (`embeddings.f16.bin`) を分離し、必要な行のみ CPU で抽出して ONNX へ渡す設計を採用している。
+> Multilingual vocabulary embedding tables exceed browser WebGPU storage buffer limits. `@r4ai/laya-web` stores raw FP16 embeddings (`embeddings.f16.bin`) in CPU memory, slices only active input tokens, converts them to FP32, and feeds the resulting tensor directly into the ONNX graph.
 
-## クイックツアー
+## Quickstart
 
-React、Vue、SolidJS、Vanilla JS など任意のフロントエンド環境で利用可能。
+### Installation
 
-ライブラリ自体は呼び出し元のスレッドで動作する。UIを止めないため、以下のコードはデモ同様にWeb Worker内で実行する。モデル資産と、使用する `onnxruntime-web` と同じバージョンの `.mjs` / `.wasm` をそれぞれ `/models/laya/` と `/ort/` に配信する（[設定例](https://github.com/r4ai/laya-web/blob/main/examples/minimal/vite.config.ts)）。
+```sh
+npm install @r4ai/laya-web onnxruntime-web
+```
 
-### 基本的な使い方
+### Usage
+
+Run inference inside a Web Worker to avoid blocking the main UI thread. Serve model assets from `/models/laya/` and matching ONNX Runtime Web binaries from `/ort/` (see [Vite configuration example](examples/minimal/vite.config.ts)).
 
 ```ts
 import { load } from "@r4ai/laya-web";
 
-// 1. モデルとランタイムのロード
+// 1. Initialize runtime and load model assets
 const agent = await load({
   modelUrl: "/models/laya/",
-  backend: "auto", // 'webgpu' | 'wasm' | 'auto'
+  backend: "auto", // "webgpu" | "wasm" | "auto"
   wasmPaths: "/ort/",
-  onProgress: (progress) => console.log("ロード進捗:", progress),
+  onProgress: (progress) => console.log("Load progress:", progress),
 });
 
 try {
-  // 2. 予測の実行
+  // 2. Execute typed predictions over input text
   const result = await agent.predict(
-    "料金が二重に請求されています。返金してください。",
+    "I was charged twice for my subscription this month. Please issue a refund.",
     {
-      // 質問 1: 単一選択 (choice)
       department: {
         type: "choice",
-        instructions: "この問い合わせを担当する部署は？",
-        criteria: ["請求・返金", "技術サポート", "営業"],
+        instructions: "Which support department should handle this request?",
+        criteria: ["Billing & Refunds", "Technical Support", "Sales"],
       },
-      // 質問 2: 段階評価 (score)
       urgency: {
         type: "score",
-        instructions: "どの程度急いで対応すべきですか？",
-        criteria: ["通常", "早め", "緊急"],
+        instructions: "How urgent is this ticket?",
+        criteria: ["Normal", "Elevated", "Immediate"],
       },
-      // 質問 3: 二値判定 (noul)
       refund: {
         type: "noul",
-        instructions: "顧客は返金を求めていますか？",
+        instructions: "Does the user explicitly demand a refund?",
       },
-    }
+    },
   );
 
-  console.log("使用バックエンド:", agent.backend);
+  console.log("Active backend:", agent.backend);
   const department = result.answers.department;
   if (department.type === "choice") {
-    console.log("部署の判定:", department.choice);
+    console.log("Selected department:", department.choice);
   }
-  console.log("確信度:", result.answers.department.confidence);
+  console.log("Confidence:", result.answers.department.confidence);
 } finally {
-  // 3. リソースの解放
+  // 3. Release ONNX session and memory buffers
   await agent.dispose();
 }
 ```
 
-### 対応する判定タイプ
+## Decision Types
 
-| タイプ | 概要 | `criteria` の指定 | 返り値の性質 |
+| Type | Description | `criteria` Specification | Output |
 | :--- | :--- | :--- | :--- |
-| **`choice`** | 単一選択 | ラベル配列 または `{ ラベル: 説明 }` | 各ラベルの選択確率および最尤ラベル |
-| **`score`** | ルーブリック評価 | レベル名の配列 | `0` 始まりのレベルインデックス期待値 |
-| **`noul`** | 命題真偽判定 | オプションで `{ false: 説明, true: 説明 }` | 命題が真である確率 $P(\text{true})$ |
+| **`choice`** | Single-label classification | Array of label strings, or `{ [label]: description }` map | Predicted label (`choice`) and probability distribution (`probabilities`) |
+| **`score`** | Ordinal evaluation on rubric scale | Array of level descriptions (0-indexed) | Expected level score (`score`), level distribution, and criteria mapping |
+| **`noul`** | Binary proposition verification | Optional `{ false?: description, true?: description }` map | Probability that proposition holds (`noul` as $P(\text{true})$) |
 
-## 確信度（Confidence）の定義
+## Confidence Calibration
 
-回答に含まれる `confidence` は、出力確率分布のエントロピー（偏り）から算出した 0.0 〜 1.0 の指標である。
+The `confidence` value returned in each answer is a normalized metric in the range `[0.0, 1.0]`, derived from output distribution entropy:
 
-- **`choice` / `score`**
-  - 確率が一つの選択肢に集中するほど 1.0 に接近
-  - 確率が選択肢間で分散するほど 0.0 に接近
+$$H(P) = -\sum_{i=1}^{K} P(i) \ln P(i)$$
+
+$$\text{confidence} = \max\left(0, 1 - \frac{H(P)}{\ln K}\right)$$
+
+Metric behavior differs by question type:
+- **`choice` and `score`**
+  - Evaluated against option count $K$
+  - Approaches 1.0 when probabilities concentrate on a single candidate
+  - Approaches 0.0 when predictions disperse uniformly across choices
 - **`noul`**
-  - 判定の明確さ（$\max(P(\text{true}), P(\text{false}))$）を表現（範囲: 0.5 〜 1.0）
+  - Evaluates classification margin $\max(P(\text{true}), P(\text{false}))$
+  - Values span `[0.5, 1.0]` where 0.5 denotes total ambiguity
 
-## デモアプリの起動
+## Local Demo
 
-ローカル環境でサンプルデモ（SolidJS + Vite）を起動するコマンド。
+To launch the SolidJS demo application locally:
 
 ```sh
 pnpm install --frozen-lockfile
@@ -142,19 +156,21 @@ pnpm model:export
 pnpm dev
 ```
 
-セットアップの詳細やモデル変換については [開発ガイド](docs/development.md) を参照。
+Open `http://127.0.0.1:5173/` in your browser.
 
-## ドキュメント一覧
+For complete setup and model conversion instructions, see the [Development Guide](docs/development.md).
 
-- [開発ガイド](docs/development.md): ローカル開発手順、モデルエクスポート、ビルドコマンド、CI/CD 設定
-- [検証仕様と品質保証ガイド](docs/validation.md): テストアーキテクチャ、精度照合結果、トラブルシューティング
+## Documentation
 
-## ライセンス・出典
+- [Development Guide](docs/development.md): Environment setup, model export, build commands, and CI/CD pipelines
+- [Validation & QA Specification](docs/validation.md): Test architecture, parity verification, benchmarks, and troubleshooting
 
-本プロジェクトは [Apache-2.0 License](LICENSE) のもとで公開されている。
+## License & Attribution
 
-- **派生元プロジェクト**: [Laya-MLX](https://github.com/mizorewww/laya-mlx)
-- **使用チェックポイント**: [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual)
-- **推論エンジン**: [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html)
+Distributed under the [Apache-2.0 License](LICENSE).
 
-著作権表示および変更点の詳細は [NOTICE](NOTICE) を参照。
+- **Upstream Project**: [Laya-MLX](https://github.com/mizorewww/laya-mlx)
+- **Base Checkpoint**: [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual)
+- **Inference Engine**: [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html)
+
+For copyright notices and attribution statements, see [NOTICE](NOTICE).
