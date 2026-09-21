@@ -1,174 +1,138 @@
-# Validation & Quality Assurance Specification
+# Validation Specification
 
-Test architecture, verification matrices, numerical parity benchmarks, and troubleshooting records for `@r4ai/laya-web`.
+Technical specification of testing layers, numerical parity benchmarks, edge-case resolutions, and release criteria for `@r4ai/laya-web`.
+
+---
 
 ## Verification Architecture
 
-Quality assurance spans four distinct layers, moving from isolated core logic to hardware-accelerated browser execution and pre-deployment artifact inspection:
+Quality assurance spans four distinct verification layers, progressing from isolated unit logic to cross-language numerical validation, hardware-accelerated browser execution, and pre-deployment distribution inspection:
 
 ```mermaid
-graph TD
-    subgraph Layer1 ["1. Unit & Core Logic (Vitest / Node.js)"]
-        CoreTest["Schema validation / Tokenization / Output formatting"]
-        StateTest["Agent serialization / AbortSignal / Resource disposal"]
+flowchart TD
+    subgraph Layer1 ["Layer 1: Unit & Core Logic (Vitest / Node.js)"]
+        L1A["Question validation & token budgeting"]
+        L1B["Agent queue serialization & disposal"]
+        L1C["Tokenizer parity against Rust reference"]
     end
 
-    subgraph Layer2 ["2. Python Reference Parity (pytest)"]
-        PyTorch["PyTorch vs ONNX logit parity across 9 input combinations"]
+    subgraph Layer2 ["Layer 2: Numerical Logit Parity (pytest)"]
+        L2A["PyTorch prototype vs ONNX graph"]
+        L2B["9 matrix combinations of lengths and options"]
     end
 
-    subgraph Layer3 ["3. Browser Hardware Integration (Chromium)"]
-        WebGPUTest["WebGPU runtime execution"]
-        WasmTest["Wasm runtime execution"]
-        MLXCPU["MLX FP32 CPU ground truth"]
-        WebGPUTest <-->|Token IDs and probabilities| MLXCPU
-        WasmTest <-->|Token IDs and probabilities| MLXCPU
+    subgraph Layer3 ["Layer 3: Browser Hardware Integration (Chromium)"]
+        L3A["WebGPU & Wasm execution backends"]
+        L3B["Apple MLX FP32 CPU reference comparison"]
+        L3C["Token IDs, marker offsets, and probability parity"]
     end
 
-    subgraph Layer4 ["4. Pre-Deployment Validation (Pages Check)"]
-        Assets["Manifest verification / SHA-256 hashes / Size budget"]
+    subgraph Layer4 ["Layer 4: Pre-Deployment Release Audit"]
+        L4A["validate-pages.mjs asset inspection"]
+        L4B["SHA-256 integrity verification"]
+        L4C["1 GB distribution size budget check"]
     end
 
     Layer1 --> Layer2 --> Layer3 --> Layer4
 ```
 
-## Verification Matrices
+---
 
-### 1. Core Logic & Agent State Management
+## Verification Layers
 
-| Target                    | Input Scenario                                                          | Expected Behavior                                                                    | Verification Layer            |
-| :------------------------ | :---------------------------------------------------------------------- | :----------------------------------------------------------------------------------- | :---------------------------- |
-| **Question Validation**   | Valid `choice`, `score`, and `noul` inputs                              | Constructs correct prefixes, marker positions, and question type IDs                 | Core Unit & Model Integration |
-| **Invalid Inputs**        | Empty choices, duplicate labels, unsupported question types             | Rejects inputs before inference dispatch (`predict()` returns rejected Promise)      | Core & Agent Unit             |
-| **Context Truncation**    | Prompts exceeding 1,024 tokens                                          | Retains choices and trailing delimiter tags while truncating input text from the end | Core Unit & Model Integration |
-| **Context Overflow**      | Schemas whose options alone exceed maximum context length               | Throws explicit context overflow error                                               | Core Unit                     |
-| **Tokenizer Parity**      | Japanese, English, JSON structures, mask tokens, consecutive whitespace | Matches Rust reference tokenizer token IDs and marker offsets exactly                | Regression & Parity Tests     |
-| **Request Serialization** | Concurrent inference calls on a ready agent                             | Serializes requests sequentially via internal Promise chain                          | Agent Unit (Mock Driver)      |
-| **Lifecycle Disposal**    | Invoking `dispose()` while inference is in flight                       | Completes ongoing predictions before releasing runtime resources                     | Agent Unit                    |
-| **Post-Disposal Safety**  | Calling `predict()` or repeated `dispose()` on disposed agent           | Rejects new inference calls; guarantees idempotent disposal without throwing         | Agent Unit & Browser          |
+### 1. Unit & Core Logic (Vitest)
 
-### 2. ONNX Model & In-Browser Inference
+- **Input Validation**: Rejects invalid question structures, unsupported question types, empty criteria arrays, and duplicate choice keys before dispatching to the inference engine.
+- **Token Budgeting & Truncation**: Enforces the 1,024-token budget. Protects candidate options and delimiter tokens while safely truncating excess state context from the end. Throws `RangeError` if candidate options alone exceed the available budget.
+- **Tokenizer Parity**: Validates the JavaScript `@huggingface/tokenizers` wrapper against the native Rust reference tokenizer across multilingual text (English, Japanese), complex JSON structures, mask tokens, and whitespace variations.
+- **Request Serialization**: Enforces strictly sequential execution via an internal Promise queue on the `Agent` instance, preventing concurrent GPU memory allocation spikes in browser tabs.
+- **Disposal Safety**: Guarantees graceful, idempotent resource release. In-flight predictions complete before the ONNX session is released; subsequent calls to `predict()` reject immediately.
 
-| Target                      | Input Scenario                                                    | Expected Behavior                                                                | Verification Layer     |
-| :-------------------------- | :---------------------------------------------------------------- | :------------------------------------------------------------------------------- | :--------------------- |
-| **Numerical Logit Parity**  | (Length, options) = (8,2), (19,3), (64,5) across 3 question types | Matches PyTorch prototype outputs within tight numerical tolerance               | Python pytest          |
-| **Hardware Browser Parity** | WebGPU and Wasm execution backends                                | Matches MLX FP32 CPU reference token IDs, choices, and output probabilities      | Browser Test Harness   |
-| **Streamed Asset Fetching** | Model files served over HTTP                                      | Validates content length headers, allocates single buffer, emits progress events | Local HTTP Integration |
-| **Asset Fetch Failures**    | HTTP 404, size mismatches, aborted transfers                      | Cancels active readers, aborts pending requests, cleans up buffers               | Local HTTP Integration |
+### 2. PyTorch vs ONNX Logit Parity (Python pytest)
 
-### 3. SolidJS Demo Application Integration
+The ONNX export is compared directly against the PyTorch reference model across 9 test scenarios varying sequence lengths and option counts:
 
-| Target                           | Input Scenario                                          | Expected Behavior                                                                | Verification Layer |
-| :------------------------------- | :------------------------------------------------------ | :------------------------------------------------------------------------------- | :----------------- |
-| **Worker Failure Recovery**      | Worker initialization or script load failure            | Displays error alert in UI and enables retry action                              | DOM Integration    |
-| **Concurrent Submit Guard**      | Form submission clicked during active inference         | Disables button and prevents duplicate execution requests                        | DOM Integration    |
-| **Worker Crash Recovery**        | Worker terminates via unhandled error event             | Terminates crashed worker instance and spawns fresh worker on retry              | DOM Integration    |
-| **Confidence Metric Separation** | Output with 80% choice probability and 41.8% confidence | Renders prediction probability and calibrated confidence in distinct UI elements | DOM Integration    |
+$$\text{Configurations: } (L, K) \in \{(8, 2), (19, 3), (64, 5)\} \times \{\text{choice}, \text{score}, \text{noul}\}$$
 
-## Reproduction Procedures
+- **Logit Tolerance**: Maximum absolute difference $\le 0.002$ ($\text{atol}=0.002, \text{rtol}=0.001$).
+- **Argmax Match**: Predicted top choice must be identical across all test inputs.
 
-### Local Test Commands
+### 3. In-Browser Hardware Integration (Chromium WebGPU / Wasm)
 
-```sh
-# 1. Typechecking and JavaScript test suites
-pnpm typecheck
-pnpm test
+The browser test harness verifies client-side execution directly within Chromium against an Apple MLX FP32 CPU reference implementation:
 
-# 2. PyTorch vs ONNX logit parity verification (Python)
-uv run pytest
+- Evaluates identical prompt scenarios across both WebGPU and Wasm execution backends.
+- Verifies exact matching of token IDs, special marker positions, and output probabilities (matching to 4 decimal places).
 
-# 3. Model baseline validation against MLX FP32 CPU reference
-pnpm model:export  # Required if assets are not yet generated
-pnpm model:verify
+### 4. Pre-Deployment Integrity Audit (`validate-pages.mjs`)
 
-# 4. In-browser hardware validation (WebGPU and Wasm)
-pnpm test:browser
-# Open the test URL in Chromium and click "Run parity suite"
-```
+Executed during `pnpm build:pages` and in automated CI pipelines:
 
-## Test Environment & Baseline Benchmarks
+- Verifies that all required files (`index.html`, `model.onnx`, `embeddings.f16.bin`, and runtime binaries) exist and are non-empty.
+- Recomputes SHA-256 hashes of all model assets and compares them against `config.json`.
+- Enforces an upper limit of 1,000,000,000 bytes (1 GB) for the total deployed site.
+- Verifies that all ONNX Runtime Web Wasm and worker modules referenced by compiled JavaScript are present in `ort/`.
 
-### Environment Specifications
+---
+
+## Numerical Accuracy & Ground Truth
+
+### Baseline Environment
 
 - **Hardware**: Apple M5 (16 GB Unified Memory)
 - **Browser**: Chromium with ONNX Runtime Web 1.30.0
-- **Reference**: MLX FP32 CPU implementation
+- **Reference**: Apple MLX FP32 CPU reference implementation
 
-### Baseline Quality Metrics
+### Baseline Parity Results
 
-| Scope                          | Case Count / Metric            | Result                                                                  |
-| :----------------------------- | :----------------------------- | :---------------------------------------------------------------------- |
-| **Python ONNX vs MLX CPU**     | 9 / 9 test scenarios           | Exact argmax match (maximum absolute logit difference: 0.00183)         |
-| **Browser WebGPU Inference**   | 9 / 9 test scenarios           | Identical token IDs, marker positions, and 4-decimal probability parity |
-| **Browser Wasm Inference**     | 9 / 9 test scenarios           | Identical token IDs, marker positions, and 4-decimal probability parity |
-| **Unit & HTTP Integration**    | All test suites passing        | Zero failures, zero skipped tests                                       |
-| **V8 Code Coverage (Node.js)** | UI components and core runtime | High statement and branch coverage across all critical modules          |
+| Target Scope                 | Test Cases      | Validation Result                                                       |
+| :--------------------------- | :-------------- | :---------------------------------------------------------------------- |
+| **Python ONNX vs MLX CPU**   | 9 / 9 scenarios | Identical argmax (maximum absolute logit difference: 0.00183)           |
+| **Browser WebGPU Inference** | 9 / 9 scenarios | Identical token IDs, marker positions, and 4-decimal probability parity |
+| **Browser Wasm Inference**   | 9 / 9 scenarios | Identical token IDs, marker positions, and 4-decimal probability parity |
+| **Unit & Integration Tests** | 86 / 86 tests   | 100% passing across all suites                                          |
 
-## Technical Findings & Troubleshooting
+### Avoiding MLX GPU Precision Drift (TF32)
 
-### 1. Avoiding MLX GPU Precision Deviations (TF32)
+By default, Apple MLX GPU execution uses TensorFloat-32 (TF32) math for FP32 matrix multiplications, which can introduce minor numerical divergence from standard IEEE 754 FP32.
 
-- **Root Cause**
-  - Default MLX GPU execution applies TensorFloat-32 (TF32) arithmetic for FP32 matrix operations
-  - Produces subtle numerical drift compared to true IEEE FP32 outputs
-- **Resolution**
-  - Set `MLX_ENABLE_TF32=0` or execute the reference model on the MLX CPU backend
-  - Guarantees true FP32 precision for parity comparisons
+When generating ground-truth comparison values with [`scripts/verify_model.py`](../scripts/verify_model.py), the script sets `MLX_ENABLE_TF32=0` and executes on the MLX CPU backend to guarantee true FP32 mathematical parity.
 
-### 2. Metaspace Tokenizer Normalization Patch
+---
 
-- **Root Cause**
-  - `@huggingface/tokenizers@0.2.0` ignores the `split: true` configuration in Metaspace pre-tokenizers
-  - Unnormalized special tokens are improperly matched against normalized text
-- **Resolution**
-  - Applied patch via `patches/@huggingface__tokenizers@0.2.0.patch`
-  - Bundled with package build to prevent environment inconsistencies
+## Critical Engineering Findings & Edge Cases
 
-## Pre-Deployment Verification
+### 1. Metaspace Tokenizer Normalization Patch
 
-The `scripts/validate-pages.mjs` script runs during `pnpm build:pages` and in CI workflows to enforce release criteria:
+- **Issue**: `@huggingface/tokenizers@0.2.0` ignores the `split: true` configuration in Metaspace pre-tokenizers, causing unnormalized special tokens to be incorrectly matched against normalized text.
+- **Resolution**: Applied a targeted patch in [`patches/@huggingface__tokenizers@0.2.0.patch`](../patches/@huggingface__tokenizers@0.2.0.patch) to ensure tokenization parity with Hugging Face's Python and Rust implementations.
 
-| Check Item             | Validation Rule                                                                          | Action on Failure                      |
-| :--------------------- | :--------------------------------------------------------------------------------------- | :------------------------------------- |
-| **Required Assets**    | Verifies presence of `index.html`, `model.onnx`, `embeddings.f16.bin`, and license files | Aborts CI build and deployment         |
-| **Model Integrity**    | Matches artifact SHA-256 hashes against `config.json` manifest                           | Rejects corrupted or modified assets   |
-| **Bundle Size Budget** | Total distribution size must not exceed 1,000,000,000 bytes (1 GB)                       | Fails deployment if budget is exceeded |
-| **ORT Binaries**       | Confirms all referenced ONNX Runtime Wasm modules exist in `ort/`                        | Prevents runtime loader failures       |
+### 2. WebGPU Storage Buffer Limits & CPU-Bound Embedding Slicing
 
-## Limitations & Scope Boundaries
+- **Issue**: Modern multilingual models (like ModernBERT) use large vocabularies (>128,000 tokens). At 768 hidden dimensions, a full FP32 embedding matrix requires ~393 MB, exceeding browser WebGPU storage buffer binding limits (commonly 128 MB or 256 MB depending on device and driver).
+- **Resolution**: `@r4ai/laya-web` stores raw FP16 embeddings (`embeddings.f16.bin`, ~248 MB) in CPU memory. During inference, only the active input token vectors are sliced, converted from FP16 to FP32 on the CPU, and fed directly as a compact tensor into the ONNX graph.
 
-- **Untested Environments**
-  - Safari, Firefox, and mobile operating systems (iOS / Android)
-  - Browser memory recovery on low-memory devices lacking WebGPU support
-- **Model Output Scope**
-  - Verification ensures exported ONNX models match original checkpoint outputs within tolerance (`atol=0.002`, `rtol=0.001`)
-  - Domain suitability or factual accuracy of model predictions remains out of scope
+### 3. Context Budgeting & Token Window Allocation
 
-## State Machine & Async Asset Fetching
+The model operates within a 1,024-token maximum window:
 
-| Current State   | Trigger / Event                  | Next State & Expected Result                                                 |
-| :-------------- | :------------------------------- | :--------------------------------------------------------------------------- |
-| Initial         | Submit valid form input          | Starts download; hides previous result container                             |
-| Results Present | Re-run submission                | Preserves previous result DOM and disclosure state; marks as previous result |
-| Re-running      | Download & inference progress    | Preserves previous result display; blocks duplicate form submissions         |
-| Re-running      | Inference succeeds               | Updates result container; clears previous result indicator                   |
-| Results Present | Invalid input submitted          | Displays validation error without worker dispatch; retains previous results  |
-| Re-running      | Model asset download fails       | Shows error alert; preserves previous results and keeps worker reusable      |
-| Re-running      | Worker error or send failure     | Retains previous results; disposes broken worker; spawns new worker on retry |
-| Error Present   | User corrects input and retries  | Re-executes inference while retaining previous result display                |
-| Any             | Component unmounts               | Disposes worker and removes event listeners                                  |
-| Config Loaded   | Asset download starts            | Initiates up to 2 concurrent HTTP download streams                           |
-| Downloading     | Asset download completes         | Fetches next queued asset in vacated slot; maps buffer to file name          |
-| Downloading     | Size mismatch, HTTP error, abort | Aborts active streams; cancels unstarted queue items                         |
-| Downloading     | All assets downloaded            | Proceeds to model session initialization                                     |
-| UI Loading      | Multiple file download progress  | Aggregates latest downloaded bytes across all files without double counting  |
-| UI Post-Error   | Retry download progress          | Resets progress tallies before tracking new download session                 |
+```
+[CLS] + [Instruction Head] + [SEP] + [Option Markers] + [SEP] + [State Context] + [SEP]
+```
 
-### Asset Loading & Scroll Performance Benchmark
+- Candidate options are allocated a reserved token budget to prevent option truncation.
+- If the instruction head and options consume most of the budget, input state context is truncated from the right.
+- If options alone exceed the token budget, the runtime rejects the call early with an explicit `RangeError`.
 
-Benchmark comparing sequential asset retrieval against 2-slot parallel retrieval:
+---
 
-| Implementation & Run  | Asset Fetch (ms) | Session Init (ms) | Total Load Time (ms) |
+## Asset Streaming & Download Performance
+
+The runtime downloads model assets using a 2-slot concurrent worker pool ([`src/assets.ts`](../src/assets.ts)). Pre-allocating a single `Uint8Array` based on expected byte counts eliminates intermediate chunk buffering and reduces memory churn.
+
+### Sequential vs. 2-Slot Parallel Download Benchmark
+
+| Method & Run          | Asset Fetch (ms) | Session Init (ms) | Total Load Time (ms) |
 | :-------------------- | ---------------: | ----------------: | -------------------: |
 | Sequential 1          |           1442.8 |            1205.2 |               2648.0 |
 | Sequential 2          |            972.8 |             947.5 |               1920.3 |
@@ -179,22 +143,34 @@ Benchmark comparing sequential asset retrieval against 2-slot parallel retrieval
 | **Sequential Median** |        **972.8** |         **947.5** |           **1920.3** |
 | **Parallel Median**   |        **904.5** |         **909.2** |           **1813.7** |
 
-Parallel fetching achieved a 7.0% median speedup in asset download and a 5.6% median reduction in total load time, while maintaining identical output classifications, probabilities, and confidence scores across all test runs.
+Parallel fetching achieves a **7.0% median speedup** in asset download and a **5.6% median reduction** in total initialization time while producing identical numerical outputs across all runs.
 
-## Regression Test Matrix
+---
 
-| State / Input     | Action                                             | Expected Result                                         |
-| :---------------- | :------------------------------------------------- | :------------------------------------------------------ |
-| Pending Inference | Caller mutates options and aborts original signal  | Aborts at checkpoint; skips inference execution         |
-| Model Config      | Malformed file size or invalid hash format         | Rejects manifest prior to downloading files             |
-| Download          | Zero byte expectation but non-empty payload        | Rejects transfer on size mismatch                       |
-| Download          | Empty body received with positive size expectation | Rejects transfer on size mismatch                       |
-| Download          | Empty body received with zero byte expectation     | Returns empty Uint8Array                                |
-| Structured Input  | Date, Map, Set, or sparse arrays                   | Rejects invalid JSON data types                         |
-| README Sample     | Typecheck against public API exports               | Compiles without TypeScript errors                      |
-| Package Docs      | Relative links and package.json files array        | All links resolve to existing files included in package |
+## Test Execution Commands
+
+```sh
+# 1. Typecheck and run all TypeScript unit tests
+pnpm typecheck
+pnpm test
+
+# 2. Verify PyTorch vs ONNX logit parity (Python)
+uv run pytest
+
+# 3. Benchmark exported model against MLX FP32 CPU reference (Apple Silicon)
+pnpm model:verify
+
+# 4. Run browser hardware validation (WebGPU and Wasm)
+pnpm test:browser
+# Open the test URL in Chromium and run the parity suite
+
+# 5. Validate distribution assets and bundle size budget
+pnpm build:pages
+```
+
+---
 
 ## Related Documents
 
-- [README.md](../README.md): Project overview and client API guide
-- [docs/development.md](development.md): Development environment, build steps, and CI/CD workflow
+- [README.md](../README.md): Project overview, architecture, and quickstart guide.
+- [Development Guide](development.md): Environment setup, build commands, and CI/CD pipelines.

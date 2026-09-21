@@ -1,17 +1,47 @@
 # Development Guide
 
-Engineering guide for developing, building, exporting models, testing, and deploying `@r4ai/laya-web`.
+Practical guide for developing, testing, exporting models, and contributing to `@r4ai/laya-web`.
 
-## Prerequisites
+---
 
-- **Node.js**: `24.x` (the CI runtime)
-- **Package Manager**: `pnpm` (v11.x)
-- **Python Environment**: [`uv`](https://docs.astral.sh/uv/) for Python and virtual environment management
+## Prerequisites & Toolchain
+
+Ensure the following tools are installed in your environment:
+
+- **Node.js**: `24.x` (matching the CI environment)
+- **pnpm**: `v11.x` (package manager)
+- **uv**: [`uv`](https://docs.astral.sh/uv/) (Python package and virtual environment manager)
 
 > [!NOTE]
-> Running `pnpm model:verify` requires an Apple Silicon Mac to execute the MLX reference implementation. Model export via `pnpm model:export` and PyTorch tests via `uv run pytest` run on standard CPU architectures.
+> An Apple Silicon Mac is required **only** if you need to run `pnpm model:verify` against the native Apple MLX reference implementation. Model export (`pnpm model:export`), PyTorch parity tests (`uv run pytest`), and all browser development run across all standard operating systems and CPU architectures.
 
-## Quickstart
+---
+
+## Repository Layout
+
+```
+.
+├── src/                  # Library source code (@r4ai/laya-web)
+│   ├── index.ts          # Public entrypoint
+│   ├── runtime.ts        # ONNX Runtime Web session initialization and execution
+│   ├── agent.ts          # Agent state, queue serialization, and disposal lifecycle
+│   ├── core.ts           # Question schema validation, token budgeting, and scoring
+│   ├── assets.ts         # Parallel asset download manager and tokenizer wrapper
+│   └── types.ts          # TypeScript type definitions
+├── examples/minimal/     # SolidJS browser demonstration application
+├── scripts/              # Build, export, and deployment validation scripts
+│   ├── export_model.py   # Hugging Face to partitioned ONNX & FP16 exporter
+│   ├── verify_model.py   # Ground-truth parity verification against MLX FP32
+│   └── validate-pages.mjs# Pre-deployment artifact and size integrity checker
+├── tests/                # Test suites (Vitest, Python, browser harness)
+└── docs/                 # Engineering documentation
+```
+
+---
+
+## Getting Started
+
+Follow these steps to set up your local development environment:
 
 ```sh
 # 1. Clone repository and install dependencies
@@ -19,165 +49,168 @@ git clone https://github.com/r4ai/laya-web.git
 cd laya-web
 pnpm install --frozen-lockfile
 
-# 2. Export base model checkpoint (required on initial setup)
+# 2. Export the default model checkpoint (required on initial setup)
 pnpm model:export
 
-# 3. Start local development server
+# 3. Start the local development server
 pnpm dev
 ```
 
-Navigate to `http://127.0.0.1:5173/` in your browser to inspect the application.
+Open `http://127.0.0.1:5173/` in your browser to inspect the application.
 
-## Model Export & Management
-
-The exporter converts Hugging Face Laya checkpoints into partitioned assets optimized for browser streaming and execution.
-
-### Default Checkpoint Specification
-
-- **Model ID**: `convaiinnovations/laya-multilingual`
-- **Revision**: `052592a15d198d9ad47da779604259b10b47b7aa`
-- **Download Size**: ~644 MB
-- **Exported Output Size**: ~934 MB (`examples/minimal/public/models/laya/`)
-
-### Export Customization
-
-To prevent accidental overwrites, the export script aborts if the destination directory already exists.
-
-To export to an alternate directory:
-
-```sh
-uv run python scripts/export_model.py --output /path/to/custom-model
-```
-
-Use `--source` and `--revision` to specify alternative ModernBERT-based Laya checkpoints. Official validation targets the default multilingual checkpoint.
+---
 
 ## Command Reference
 
-### Development and Quality Assurance
+### Development & Quality Assurance
 
-| Command             | Description                                                          |
-| :------------------ | :------------------------------------------------------------------- |
-| `pnpm lint`         | Check JavaScript and TypeScript with oxlint; warnings fail CI        |
-| `pnpm lint:fix`     | Apply safe oxlint fixes                                              |
-| `pnpm format:check` | Check formatting with oxfmt                                          |
-| `pnpm format`       | Format supported source, configuration, and documentation files      |
-| `pnpm typecheck`    | Run TypeScript compiler checks without emitting files                |
-| `pnpm test`         | Run Vitest unit and integration suites with V8 coverage              |
-| `uv run pytest`     | Validate logit parity between PyTorch and ONNX models                |
-| `pnpm model:verify` | Compare exported model outputs against MLX FP32 CPU reference values |
-| `pnpm test:browser` | Launch browser test harness for WebGPU and Wasm verification         |
+| Command             | Action                                                           |
+| :------------------ | :--------------------------------------------------------------- |
+| `pnpm dev`          | Build the library and start the Vite dev server with hot reload  |
+| `pnpm lint`         | Run oxlint over JavaScript and TypeScript (fails on any warning) |
+| `pnpm lint:fix`     | Apply automatic oxlint fixes                                     |
+| `pnpm format:check` | Check code formatting with oxfmt                                 |
+| `pnpm format`       | Auto-format source code, configurations, and documentation       |
+| `pnpm typecheck`    | Run the TypeScript compiler without emitting files               |
+| `pnpm test`         | Run Vitest unit and integration suites with V8 coverage          |
+| `uv run pytest`     | Verify numerical logit parity between PyTorch and ONNX           |
+| `pnpm model:verify` | Benchmark exported ONNX outputs against Apple MLX FP32 reference |
+| `pnpm test:browser` | Launch the browser test harness for WebGPU / Wasm parity checks  |
 
-### Build and Distribution
+### Build & Distribution
 
-| Command            | Description                                                                   |
-| :----------------- | :---------------------------------------------------------------------------- |
-| `pnpm build`       | Compile library source to `dist/` with ESM bundles and TypeScript definitions |
-| `pnpm build:demo`  | Build the SolidJS demo application in `examples/minimal/dist/`                |
-| `pnpm build:pages` | Build the GitHub Pages distribution with automated asset validation           |
-| `pnpm pack`        | Package library into a `.tgz` archive for local npm verification              |
+| Command            | Action                                                               |
+| :----------------- | :------------------------------------------------------------------- |
+| `pnpm build`       | Bundle library into `dist/` with ESM output and `.d.ts` declarations |
+| `pnpm build:demo`  | Build the standalone SolidJS demo application                        |
+| `pnpm build:pages` | Build the demo and validate all assets with `validate-pages.mjs`     |
+| `pnpm pack`        | Create an npm `.tgz` archive to verify packaged contents             |
+
+---
+
+## Model Export Pipeline
+
+The export script ([`scripts/export_model.py`](../scripts/export_model.py)) converts Hugging Face Laya checkpoints into partitioned assets tailored for browser streaming.
+
+### Default Checkpoint Specification
+
+- **Hugging Face Model ID**: `convaiinnovations/laya-multilingual`
+- **Pinned Git Revision**: `052592a15d198d9ad47da779604259b10b47b7aa`
+- **Original Download Size**: ~644 MB
+- **Exported Output Directory**: `examples/minimal/public/models/laya/` (~934 MB total)
+
+### Generated Artifacts
+
+```
+models/laya/
+├── config.json                 # Architecture parameters, calibration, and SHA-256 hashes
+├── model.onnx                  # ONNX computation graph structure (external data format)
+├── model.onnx.data             # Model weights loaded on demand (~684 MB)
+├── embeddings.f16.bin          # Raw FP16 token embedding table (~248 MB)
+└── tokenizer/                  # Hugging Face tokenizer files
+    ├── tokenizer.json
+    └── tokenizer_config.json
+```
+
+### Custom Export
+
+The script guards against accidental overwrites by aborting if the target directory already exists. To export to a custom path or evaluate an alternative ModernBERT checkpoint:
+
+```sh
+uv run python scripts/export_model.py \
+  --output /path/to/custom-directory \
+  --source convaiinnovations/laya-multilingual \
+  --revision 052592a15d198d9ad47da779604259b10b47b7aa
+```
+
+---
 
 ## Continuous Integration
 
-`.github/workflows/ci.yml` runs on pull requests and manual dispatches. The release
-workflow also calls it for every `main` push before any versioning or publication.
-It checks oxlint, oxfmt, TypeScript, Vitest with V8 coverage, the library build,
-package contents, and Python's synthetic PyTorch/ONNX parity test. Dependencies
-are installed from frozen pnpm and uv lockfiles.
+The main CI workflow (`.github/workflows/ci.yml`) runs on pull requests and pushes to `main`. It enforces strict quality gates:
 
-The model-dependent tokenizer parity test is skipped when exported fixtures are
-absent, as on clean PR runners. The Pages workflow exports the pinned model first
-and runs that test with real fixtures. Browser/WebGPU and MLX reference checks
-remain separate manual acceptance steps. V8 coverage is reported; this setup does
-not impose a new percentage threshold.
+1. **Static Analysis**: `oxlint` (zero warnings allowed), `oxfmt` formatting verification, and `tsc --noEmit`.
+2. **JavaScript Tests**: Vitest suite with V8 code coverage reporting.
+3. **Python Verification**: PyTorch vs ONNX logit parity checks (`uv run --frozen pytest`).
+4. **Build & Package Audit**: Full library compilation and inspection of packaged artifacts.
 
-Generated models, build output, coverage, local learning artifacts, and dependency
-patches are excluded from formatting. pnpm owns the lockfile's formatting.
+> [!NOTE]
+> Clean CI PR runners do not maintain the 1 GB model weights in cache, so model-dependent tokenizer tests are skipped if fixtures are absent. The GitHub Pages deployment workflow exports the pinned model first and executes complete fixture-backed validation.
 
-## npm Releases with Changesets and OIDC
+---
 
-For a publishable change, run `pnpm changeset`, choose `@r4ai/laya-web` and a bump
-type, and commit the generated Markdown file with the implementation. Tooling-only
-changes do not require a changeset.
+## GitHub Pages Deployment
 
-`.github/workflows/release.yml` runs the checks, then selects one transition:
+The demo site is automatically validated and deployed to GitHub Pages on every push to `main` (`.github/workflows/pages.yml`).
 
-| State on `main`                                   | Result                                                                     |
-| :------------------------------------------------ | :------------------------------------------------------------------------- |
-| Any required check fails                          | No version PR, package upload, or release                                  |
-| Pending changesets                                | Create/update `chore: release packages` with versions and changelog        |
-| No changesets and an unpublished version          | Build and pack, then publish the tarball and create the GitHub release/tag |
-| No changesets and every version already published | No new package publication                                                 |
-| Manual dispatch on another branch                 | Run checks only                                                            |
+Before deployment, [`scripts/validate-pages.mjs`](../scripts/validate-pages.mjs) validates release integrity:
 
-Merge the version PR to publish. Versioning refreshes the lockfile and formats
-generated files. Build/pack jobs have read access; only the publish job receives
-`id-token: write`, with the `npm` environment. Changesets v3 invokes the pinned
-pnpm 11 CLI, which supports npm trusted publishing natively. No `NPM_TOKEN` or
-`NODE_AUTH_TOKEN` secret is used. Concurrent releases are serialized.
+1. **Required Assets**: Verifies presence and non-zero size of `index.html`, `LICENSE`, `NOTICE`, and ONNX Runtime Wasm modules.
+2. **Model Integrity**: Computes SHA-256 hashes of all exported model files and verifies them against `config.json`.
+3. **Size Budget**: Confirms total distribution size does not exceed the 1,000,000,000 bytes (1 GB) budget.
+4. **Wasm Dependencies**: Scans bundled JavaScript output to ensure all referenced ONNX Runtime Wasm and worker files exist under `ort/`.
 
-### One-time Registry and Repository Setup
-
-1. The npm package must exist before its trusted publisher can be configured.
-   If `@r4ai/laya-web` is still unpublished, a maintainer must bootstrap the current
-   `0.1.0` using interactive npm authentication and 2FA: run `npm login`, then
-   `pnpm install --frozen-lockfile`, the local quality checks, and
-   `npm publish --access public`. The `prepack` hook builds the library. This is a
-   one-time account operation; subsequent releases use OIDC. The included initial
-   changeset prepares `0.1.1` through the version PR.
-2. In npm package settings, add a GitHub Actions trusted publisher with these
-   exact values. Enable direct publishing (`npm publish`); stage-only permission
-   does not work with this Changesets flow.
-
-   | Field                | Value         |
-   | :------------------- | :------------ |
-   | Organization or user | `r4ai`        |
-   | Repository           | `laya-web`    |
-   | Workflow filename    | `release.yml` |
-   | Environment          | `npm`         |
-
-3. In GitHub repository **Settings → Actions → General**, enable **Allow GitHub
-   Actions to create and approve pull requests**. The version job requests its
-   own `contents: write` and `pull-requests: write` permissions.
-4. Create the GitHub environment `npm` and restrict its deployment branch to
-   `main`. Keep the same environment name in npm's trusted publisher settings.
-
-PRs created with `GITHUB_TOKEN` do not automatically trigger PR workflows. Close
-and reopen the generated version PR as a maintainer to run PR checks if required
-by branch protection. Every merge to `main` is independently checked again before
-publishing.
-
-See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) and
-[Changesets automation](https://changesets.dev/guide/automating) for provider setup.
-
-## GitHub Pages
-
-Automated workflows test, validate, and deploy the demo application to GitHub Pages on pushes to `main` (`.github/workflows/pages.yml`).
-
-### Workflow Steps
-
-1. **Cache Verification**
-   - Restores converted model artifacts using cache keys derived from Python dependencies and export scripts
-2. **Model Conversion**
-   - Downloads checkpoint from Hugging Face and exports ONNX assets only on cache miss
-3. **Quality Validation**
-   - Runs `pnpm lint`, `pnpm format:check`, `uv run --frozen pytest`, `pnpm typecheck`, and `pnpm test` with V8 coverage reporting
-4. **Distribution Asset Inspection (`scripts/validate-pages.mjs`)**
-   - Validates existence of required entrypoints (`index.html`, `model.onnx`, `embeddings.f16.bin`)
-   - Verifies SHA-256 integrity hashes against `config.json` manifests
-   - Enforces overall distribution size limit of 1,000,000,000 bytes (1 GB)
-   - Verifies presence of all ONNX Runtime Web helper binaries required by the application bundle
-5. **Deployment**
-   - Publishes verified assets to GitHub Pages
-
-### Validating Pages Build Locally
-
-Run the complete build and verification pipeline locally:
+To test the full Pages build and validation pipeline locally:
 
 ```sh
 pnpm build:pages
 ```
 
+---
+
+## Releases & Versioning
+
+We manage version bumps and changelogs using [Changesets](https://github.com/changesets/changesets) and publish to npm using GitHub Actions **OpenID Connect (OIDC) Trusted Publishing**.
+
+### Creating a Changeset
+
+When submitting a user-facing change:
+
+```sh
+pnpm changeset
+```
+
+1. Select `@r4ai/laya-web`.
+2. Choose the appropriate semver bump (`major`, `minor`, `patch`).
+3. Enter a concise summary of the change.
+4. Commit the generated markdown file under `.changeset/` with your PR.
+
+> Tooling, test, or documentation-only changes that do not affect the published package do not require a changeset.
+
+### Automated Release Flow
+
+When a pull request with a changeset merges into `main`, `.github/workflows/release.yml` triggers:
+
+```mermaid
+flowchart TD
+    Merge[PR Merged to main] --> RunChecks[Run All Quality Checks]
+    RunChecks --> CheckChangesets{Pending Changesets?}
+
+    CheckChangesets -- Yes --> OpenPR[Open/Update 'Version Packages' PR]
+    CheckChangesets -- No --> CheckUnpublished{Unpublished Version on main?}
+
+    CheckUnpublished -- Yes --> Publish[Build & Publish to npm via OIDC]
+    Publish --> CreateTag[Create GitHub Release & Tag]
+    CheckUnpublished -- No --> Done[No Action Needed]
+```
+
+### Initial Registry & OIDC Setup
+
+For maintainers configuring npm trusted publishing for the first time:
+
+1. **Bootstrap Initial Version**: If `@r4ai/laya-web` has never been published, publish the initial version once manually using `npm login` and `npm publish --access public`. Subsequent releases use OIDC.
+2. **Configure Trusted Publisher on npmjs.com**:
+   In package settings, add a GitHub Actions trusted publisher with the following values:
+   - **Organization or user**: `r4ai`
+   - **Repository**: `laya-web`
+   - **Workflow filename**: `release.yml`
+   - **Environment name**: `npm`
+3. **GitHub Environment**: Create a GitHub repository environment named `npm` and restrict deployments to the `main` branch.
+4. **Workflow Permissions**: In GitHub repository **Settings → Actions → General**, ensure **Allow GitHub Actions to create and approve pull requests** is enabled.
+
+---
+
 ## Related Documents
 
-- [README.md](../README.md): Project overview and client API guide
-- [docs/validation.md](validation.md): Verification specifications and test matrices
+- [README.md](../README.md): Project overview, architecture, and quickstart guide.
+- [Validation Specification](validation.md): Verification layers, numerical tolerances, and benchmarks.

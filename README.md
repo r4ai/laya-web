@@ -3,84 +3,80 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![GitHub Pages](https://img.shields.io/badge/Demo-GitHub%20Pages-brightgreen)](https://r4ai.github.io/laya-web/)
 
-Client-side runtime for [Laya-MLX](https://github.com/mizorewww/laya-mlx) decision models in the browser, powered by ONNX Runtime Web (WebGPU / Wasm).
+Client-side runtime for [Laya-MLX](https://github.com/mizorewww/laya-mlx) decision models in the browser, powered by ONNX Runtime Web (WebGPU & Wasm).
 
-Unlike general generative LLMs that output free-form text, Laya performs fast, low-footprint classification over structured decision schemas (typed decisions):
+Instead of generating unstructured, free-form text like standard LLMs, Laya evaluates structured decision schemas (**typed decisions**) directly over input context:
 
-- Single-choice selection (`choice`)
-- Ordinal scoring (`score`)
-- Binary truth evaluation (`noul`)
+- **Categorical Choice (`choice`)**: Selects the best-matching option from discrete candidate labels.
+- **Ordinal Scoring (`score`)**: Evaluates input against an ordered rubric or severity scale.
+- **Proposition Verification (`noul`)**: Determines whether a binary condition holds true.
 
 [Live Demo](https://r4ai.github.io/laya-web/)
 
-## Features
+---
 
-- Fully local execution
-  - Zero external API dependencies
-  - Total client-side data privacy
-  - Zero network latency or API rate limits
-- Web Worker architecture
-  - Inference executes off the main thread
-  - Preserves responsive 60fps UI rendering and interaction
-- Hardware acceleration with automatic fallback
-  - Uses WebGPU where supported
-  - Falls back to single-threaded SIMD WebAssembly (Wasm) automatically
-- Calibrated confidence metrics
-  - Normalized entropy-based confidence score (0.0 to 1.0)
-  - Clear separation between class probabilities and decision certainty
-- Memory-efficient embedding lookup
-  - FP16 embedding table stored in CPU memory
-  - Avoids WebGPU storage buffer limits on large vocabulary matrices
+## Why @r4ai/laya-web?
+
+- **100% Client-Side Execution**: Runs entirely on the user's device. No user text is sent across the network, eliminating API costs, rate limits, and latency spikes.
+- **Non-Blocking Inference**: Designed for dedicated Web Workers, ensuring complex classification passes never degrade 60fps UI responsiveness.
+- **Adaptive Hardware Acceleration**: Targets WebGPU for GPU execution and falls back seamlessly to single-threaded SIMD WebAssembly when WebGPU is unavailable.
+- **Memory-Conscious Embedding Slicing**: Multilingual vocabularies (128k+ tokens) exceed browser WebGPU storage buffer limits. `@r4ai/laya-web` retains raw FP16 embeddings in CPU memory, slices only the active token vectors per inference step, converts them to FP32, and feeds the resulting tensor to the ONNX graph.
+- **Calibrated Confidence**: Computes normalized entropy metrics ($0.0$ to $1.0$) alongside raw probabilities, allowing client applications to distinguish high certainty from ambiguity.
+
+---
 
 ## Architecture
 
-The runtime separates UI orchestration from tensor execution through a dedicated Web Worker:
+The runtime decouples UI state orchestration from tensor compute across a Web Worker boundary:
 
 ```mermaid
-graph TD
+flowchart TD
     subgraph MainThread ["Main Thread (UI)"]
-        App["Web Application"]
-        Agent["@r4ai/laya-web Agent"]
+        UI["Web Application"]
+        Agent["Agent Client (@r4ai/laya-web)"]
     end
 
     subgraph WorkerThread ["Web Worker"]
-        Driver["Worker Driver"]
-        CPUEmb["CPU Embedding Extractor<br/>(FP16 → FP32)"]
+        Driver["OnnxDriver"]
+        CPUEmb["CPU Embedding Lookup<br/>(FP16 → FP32 Token Slicing)"]
         ORT["ONNX Runtime Web"]
     end
 
-    subgraph ExecProvider ["Execution Backends"]
+    subgraph Backends ["Execution Backends"]
         WebGPU["WebGPU (Preferred)"]
-        Wasm["Wasm (SIMD Fallback)"]
+        Wasm["Wasm SIMD (Fallback)"]
     end
 
-    App <-->|predict / load| Agent
-    Agent <-->|postMessage| Driver
-    Driver --> CPUEmb
-    CPUEmb --> ORT
-    ORT -->|Primary| WebGPU
-    ORT -->|Fallback| Wasm
+    UI -->|predict(state, questions)| Agent
+    Agent -->|postMessage| Driver
+    Driver -->|Token IDs| CPUEmb
+    CPUEmb -->|Active Embeddings Tensor| ORT
+    ORT -->|Primary Provider| WebGPU
+    ORT -.->|Fallback Provider| Wasm
+    Driver -->|Formatted Answers| Agent
+    Agent -->|Prediction Result| UI
 ```
 
-> [!NOTE]
-> Multilingual vocabulary embedding tables exceed browser WebGPU storage buffer limits. `@r4ai/laya-web` stores raw FP16 embeddings (`embeddings.f16.bin`) in CPU memory, slices only active input tokens, converts them to FP32, and feeds the resulting tensor directly into the ONNX graph.
+---
 
-## Quickstart
-
-### Installation
+## Installation
 
 ```sh
 npm install @r4ai/laya-web onnxruntime-web
+# or
+pnpm add @r4ai/laya-web onnxruntime-web
 ```
 
-### Usage
+---
 
-Run inference inside a Web Worker to avoid blocking the main UI thread. Serve model assets from `/models/laya/` and matching ONNX Runtime Web binaries from `/ort/` (see [Vite configuration example](examples/minimal/vite.config.ts)).
+## Usage
+
+Inference should run inside a Web Worker to avoid blocking the browser's UI thread. Ensure model assets (produced by `pnpm model:export`) and ONNX Runtime Web binaries are served statically (see the [Vite configuration example](examples/minimal/vite.config.ts)).
 
 ```ts
 import { load } from "@r4ai/laya-web";
 
-// 1. Initialize runtime and load model assets
+// 1. Initialize the runtime and load model assets
 const agent = await load({
   modelUrl: "/models/laya/",
   backend: "auto", // "webgpu" | "wasm" | "auto"
@@ -89,7 +85,7 @@ const agent = await load({
 });
 
 try {
-  // 2. Execute typed predictions over input text
+  // 2. Execute structured predictions over input text or state
   const result = await agent.predict(
     "I was charged twice for my subscription this month. Please issue a refund.",
     {
@@ -111,44 +107,68 @@ try {
   );
 
   console.log("Active backend:", agent.backend);
+
   const department = result.answers.department;
   if (department.type === "choice") {
     console.log("Selected department:", department.choice);
+    console.log("Distribution:", department.probabilities);
   }
-  console.log("Confidence:", result.answers.department.confidence);
+  console.log("Confidence:", department.confidence);
 } finally {
-  // 3. Release ONNX session and memory buffers
+  // 3. Release ONNX sessions and memory buffers
   await agent.dispose();
 }
 ```
 
+---
+
 ## Decision Types
 
-| Type         | Description                        | `criteria` Specification                                   | Output                                                                    |
-| :----------- | :--------------------------------- | :--------------------------------------------------------- | :------------------------------------------------------------------------ |
-| **`choice`** | Single-label classification        | Array of label strings, or `{ [label]: description }` map  | Predicted label (`choice`) and probability distribution (`probabilities`) |
-| **`score`**  | Ordinal evaluation on rubric scale | Array of level descriptions (0-indexed)                    | Expected level score (`score`), level distribution, and criteria mapping  |
-| **`noul`**   | Binary proposition verification    | Optional `{ false?: description, true?: description }` map | Probability that proposition holds (`noul` as $P(\text{true})$)           |
+| Type         | Target Problem                | `criteria` Schema                                                    | Output Structure                                                                              |
+| :----------- | :---------------------------- | :------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------- |
+| **`choice`** | Categorical classification    | String array `["A", "B"]` or dictionary `{ [label]: "description" }` | Selected label (`choice`), per-class distribution (`probabilities`), and `confidence`         |
+| **`score`**  | Ordinal grading on a rubric   | Ordered array of level descriptions `["low", "medium", "high"]`      | Expected numeric value (`score`), level mapping (`legend`), `probabilities`, and `confidence` |
+| **`noul`**   | Binary statement verification | Optional `{ false?: "description", true?: "description" }`           | Probability of truth (`noul` as $P(\text{true})$) and decision `confidence`                   |
+
+---
 
 ## Confidence Calibration
 
-The `confidence` value returned in each answer is a normalized metric in the range `[0.0, 1.0]`, derived from output distribution entropy:
+Each answer includes a normalized `confidence` value in the range $[0.0, 1.0]$. This value is calculated from the Shannon entropy of the calibrated probability distribution:
 
 $$H(P) = -\sum_{i=1}^{K} P(i) \ln P(i)$$
 
 $$\text{confidence} = \max\left(0, 1 - \frac{H(P)}{\ln K}\right)$$
 
-Metric behavior differs by question type:
+### Interpretation by Question Type
 
-- **`choice` and `score`**
-  - Evaluated against option count $K$
-  - Approaches 1.0 when probabilities concentrate on a single candidate
-  - Approaches 0.0 when predictions disperse uniformly across choices
-- **`noul`**
-  - Evaluates classification margin $\max(P(\text{true}), P(\text{false}))$
-  - Values span `[0.5, 1.0]` where 0.5 denotes total ambiguity
+- **`choice` and `score` ($K \ge 2$)**: Evaluated over option count $K$. Yields $1.0$ when probability concentrates entirely on a single choice, and scales down to $0.0$ when probabilities are uniformly dispersed across all candidates.
+- **`noul` (Binary)**: Evaluated directly as the classification margin $\max(P(\text{true}), P(\text{false}))$, spanning $[0.5, 1.0]$. A score of $0.5$ represents maximum ambiguity, whereas $1.0$ indicates total certainty.
 
-## Local Demo
+---
+
+## Model Assets & Hosting
+
+A standard `@r4ai/laya-web` deployment requires serving the following files under your `modelUrl` directory:
+
+| File                 | Size    | Description                                                                |
+| :------------------- | :------ | :------------------------------------------------------------------------- |
+| `config.json`        | ~1 KB   | Model dimensions, token budgets, temperature calibration, and file digests |
+| `model.onnx`         | ~2.5 MB | ONNX computation graph structure (without weights)                         |
+| `model.onnx.data`    | ~684 MB | Partitioned model weights loaded on demand by ONNX Runtime Web             |
+| `embeddings.f16.bin` | ~248 MB | Raw FP16 token embedding table read directly by CPU memory                 |
+| `tokenizer/`         | ~1.6 MB | Hugging Face tokenizer configuration and vocabulary files                  |
+
+Generate these files locally using:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm model:export
+```
+
+---
+
+## Local Development & Demo
 
 To launch the SolidJS demo application locally:
 
@@ -160,12 +180,14 @@ pnpm dev
 
 Open `http://127.0.0.1:5173/` in your browser.
 
-For complete setup and model conversion instructions, see the [Development Guide](docs/development.md).
+---
 
 ## Documentation
 
-- [Development Guide](docs/development.md): Environment setup, model export, build commands, and CI/CD pipelines
-- [Validation & QA Specification](docs/validation.md): Test architecture, parity verification, benchmarks, and troubleshooting
+- [Development Guide](docs/development.md): Environment setup, model export pipeline, build commands, and CI/CD workflows.
+- [Validation Specification](docs/validation.md): Multi-tiered verification strategy, numerical parity benchmarks, and hardware troubleshooting.
+
+---
 
 ## License & Attribution
 
@@ -173,6 +195,6 @@ Distributed under the [Apache-2.0 License](LICENSE).
 
 - **Upstream Project**: [Laya-MLX](https://github.com/mizorewww/laya-mlx)
 - **Base Checkpoint**: [convaiinnovations/laya-multilingual](https://huggingface.co/convaiinnovations/laya-multilingual)
-- **Inference Engine**: [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html)
+- **Inference Runtime**: [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html)
 
 For copyright notices and attribution statements, see [NOTICE](NOTICE).
