@@ -163,7 +163,7 @@ export type Answer = AnswerBase &
         type: "choice";
         /** Highest-probability candidate label from `criteria` */
         choice: string;
-        /** Calibrated probabilities per label (normalized to sum to 1.0) */
+        /** Calibrated probabilities per label (sums to 1 before rounding) */
         probabilities: Record<string, number>;
       }
     | {

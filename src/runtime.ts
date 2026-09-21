@@ -108,7 +108,7 @@ async function createSession(
  * @remarks
  * Runtime characteristics:
  * - Downloads assets from `options.modelUrl` (~900 MB total)
- * - Verifies manifest integrity and file sizes
+ * - Validates manifest structure and file sizes
  * - Initializes ONNX Runtime Web session (WebGPU with WASM fallback)
  * - Executes entirely client-side without remote server calls
  * - Operates in either main thread or Web Worker
@@ -120,7 +120,7 @@ async function createSession(
  * @param options - Checkpoint location and runtime configuration
  * @returns Initialized {@link Agent} instance
  * @throws TypeError - Missing `modelUrl`, invalid backend, or malformed config
- * @throws Error - Asset download failure, size mismatch, or manifest corruption
+ * @throws Error - Asset download failure, size mismatch, or invalid manifest
  * @throws Error - Operation aborted via `options.signal`
  *
  * @example
