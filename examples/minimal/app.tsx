@@ -374,7 +374,7 @@ function ResultView(props: { data: Result; previous: boolean }) {
         <span>
           {answer().type === "noul"
             ? "Higher probability between true and false; not an accuracy score"
-            : "Probability concentration metric (normalized Shannon entropy); not an accuracy score"}
+            : "Probability concentration metric (1 minus normalized Shannon entropy); not an accuracy score"}
         </span>
       </p>
       <div id="probabilities">
