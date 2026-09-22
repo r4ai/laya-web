@@ -203,15 +203,15 @@ export interface Prediction {
 
 /** Configuration options for {@link load}. */
 export interface LoadOptions {
-  /** Base URL of exported model directory served over HTTP(S) */
+  /** Model directory: HTTP(S) URL; Node.js also accepts local paths and file: URLs. */
   modelUrl: string;
   /**
    * Preferred execution backend.
    *
    * @remarks
    * Provider resolution:
-   * - `"auto"`: Attempts WebGPU; falls back to WASM on failure with a `"fallback"` event
-   * - `"webgpu"`: Requires WebGPU; rejects if unavailable
+   * - `"auto"`: In browsers, attempts WebGPU then WASM with a `"fallback"` event; Node.js uses WASM directly
+   * - `"webgpu"`: Browser only; rejects in Node.js or if unavailable
    * - `"wasm"`: Uses WebAssembly directly
    *
    * @defaultValue `"auto"`
@@ -221,7 +221,8 @@ export interface LoadOptions {
    * Directory containing ONNX Runtime `.wasm` and `.mjs` assets.
    *
    * @remarks
-   * Required when WASM binaries cannot be resolved from host origin.
+   * Browsers: required when WASM binaries cannot be resolved from host origin.
+   * Node.js resolves bundled WASM assets automatically; omit this option.
    * Applies globally to `ort.env.wasm.wasmPaths`.
    */
   wasmPaths?: string;

@@ -4,6 +4,7 @@
   "sortPackageJson": false,
   "ignorePatterns": [
     "artifacts/**",
+    "tests/fixtures/node-model/**",
     ".ruff_cache/**",
     "pnpm-lock.yaml",
     "patches/**"

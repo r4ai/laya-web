@@ -1,7 +1,7 @@
 {
   "name": "@r4ai/laya-web",
   "version": "0.1.2",
-  "description": "Laya typed decisions in the browser with ONNX Runtime Web",
+  "description": "Laya typed decisions in browsers and Node.js with ONNX Runtime Web",
   "type": "module",
   "license": "Apache-2.0",
   "publishConfig": {
@@ -16,6 +16,10 @@
   ],
   "exports": {
     ".": {
+      "node": {
+        "types": "./dist/node.d.ts",
+        "import": "./dist/node.js"
+      },
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
@@ -37,7 +41,9 @@
     "format:check": "oxfmt --check .",
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm install --lockfile-only && pnpm format",
-    "release": "changeset publish"
+    "release": "changeset publish",
+    "test:node": "pnpm build && node --test tests/node-package.mjs",
+    "model:verify:node": "pnpm build && node scripts/verify-node.mjs"
   },
   "packageManager": "pnpm@11.22.0",
   "dependencies": {
@@ -62,5 +68,8 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/r4ai/laya-web.git"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

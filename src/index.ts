@@ -1,5 +1,5 @@
 /**
- * Browser inference engine for Laya typed-decision models using ONNX Runtime Web.
+ * Browser and Node.js inference engine for Laya typed-decision models using ONNX Runtime Web.
  *
  * @remarks
  * Evaluates structured decisions over input states without text generation:
@@ -35,7 +35,7 @@
  * @packageDocumentation
  */
 
-export { load } from "./runtime.js";
+export { load } from "./browser.js";
 export type { Agent } from "./agent.js";
 export type {
   Answer,

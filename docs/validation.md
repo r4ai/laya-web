@@ -181,3 +181,22 @@ pnpm build:pages
 
 - [README.md](../README.md): Project overview, architecture, and quickstart guide
 - [Development Guide](development.md): Environment setup, build commands, and CI/CD pipelines
+
+## Node.js runtime
+
+`pnpm test:node` builds and exercises the public package import with a tiny committed ONNX model, including external weights. The fixture generator is `tests/fixtures/node-model/generate.py`; regenerate it with `.venv/bin/python tests/fixtures/node-model/generate.py` after installing the Python project dependencies. No model download is required for CI.
+
+| Initial state / input                              | Transition       | Expected result                              |
+| -------------------------------------------------- | ---------------- | -------------------------------------------- |
+| Local relative/absolute directory or file URL      | load             | WASM agent, validated bytes, progress events |
+| HTTP model URL                                     | load             | Same agent and inference results             |
+| Default or auto backend in Node.js                 | initialize       | WASM, no WebGPU fallback event               |
+| Explicit WebGPU / unknown backend                  | load             | Reject before reading model assets           |
+| Missing file or size mismatch (short, long, empty) | read             | Reject, cancel remaining batch reads         |
+| Aborted signal before/during file read             | read             | Reject and release streams                   |
+| Ready agent, choice/score/noul/single choice       | predict          | Expected probabilities and action output     |
+| Ready agent                                        | repeated predict | Same result                                  |
+| Ready agent                                        | dispose twice    | Resources released, second call safe         |
+| Disposed agent                                     | predict          | Reject                                       |
+
+`pnpm model:verify:node` additionally loads the full exported checkpoint and compares all nine reference questions against `parity.json`, including usage and rounded probabilities (absolute tolerance `0.000101`). It fails if assets are absent; it does not silently skip validation.

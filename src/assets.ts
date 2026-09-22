@@ -1,18 +1,24 @@
 import { Tokenizer as HFTokenizer } from "@huggingface/tokenizers";
 import type { LoadOptions, Tokenizer } from "./types.js";
 
+export type AssetReader = (url: URL, signal?: AbortSignal) => Promise<Response>;
+
+const fetchAsset: AssetReader = (url, signal) => fetch(url, { signal });
+
 export async function download(
   base: URL,
   file: string,
   options: LoadOptions,
   expectedBytes?: number,
+  read: AssetReader = fetchAsset,
 ): Promise<Uint8Array> {
   if (
     expectedBytes !== undefined &&
     (!Number.isSafeInteger(expectedBytes) || expectedBytes < 0)
   )
     throw new TypeError(`Invalid expected size for ${file}`);
-  const response = await fetch(new URL(file, base), { signal: options.signal });
+  options.signal?.throwIfAborted();
+  const response = await read(new URL(file, base), options.signal);
   if (!response.ok)
     throw new Error(
       `Cannot load ${file}: HTTP ${response.status}. Run the model exporter and serve its output.`,
@@ -61,6 +67,7 @@ export async function downloadAssets(
   base: URL,
   files: Record<string, number | undefined>,
   options: LoadOptions,
+  read: AssetReader = fetchAsset,
 ): Promise<Record<string, Uint8Array>> {
   options.signal?.throwIfAborted();
   const controller = new AbortController();
@@ -82,6 +89,7 @@ export async function downloadAssets(
             signal: controller.signal,
           },
           bytes,
+          read,
         );
       }
     } catch (error) {

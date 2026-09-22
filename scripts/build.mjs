@@ -17,3 +17,16 @@ await build({
   external: ["onnxruntime-web/webgpu"],
   legalComments: "eof",
 });
+
+// Keep Node built-ins and the Node-compatible ORT entry out of browser bundles.
+await build({
+  entryPoints: ["src/node.ts"],
+  outfile: "dist/node.js",
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  target: "node22",
+  sourcemap: true,
+  external: ["onnxruntime-web"],
+  legalComments: "eof",
+});

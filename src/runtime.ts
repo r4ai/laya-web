@@ -1,7 +1,8 @@
-import * as ort from "onnxruntime-web/webgpu";
+import type * as ort from "onnxruntime-web/webgpu";
 import { Agent } from "./agent.js";
 import type { Driver } from "./agent.js";
 import { createTokenizer, download, downloadAssets } from "./assets.js";
+import type { AssetReader } from "./assets.js";
 import { halfToFloat, validateConfig } from "./core.js";
 import type {
   Backend,
@@ -12,6 +13,7 @@ import type {
 
 class OnnxDriver implements Driver {
   constructor(
+    private readonly runtime: typeof ort,
     readonly backend: Backend,
     private readonly session: ort.InferenceSession,
     private embeddings: Uint16Array,
@@ -35,20 +37,20 @@ class OnnxDriver implements Driver {
         : question.markers;
     const mask = markers.map((_, i) => (i < question.markers.length ? 1 : 0));
     const feeds = {
-      embeddings: new ort.Tensor("float32", values, [
+      embeddings: new this.runtime.Tensor("float32", values, [
         1,
         question.ids.length,
         hiddenSize,
       ]),
-      marker_pos: new ort.Tensor(
+      marker_pos: new this.runtime.Tensor(
         "int64",
         BigInt64Array.from(markers.map(BigInt)),
         [markers.length],
       ),
-      marker_mask: new ort.Tensor("bool", Uint8Array.from(mask), [
+      marker_mask: new this.runtime.Tensor("bool", Uint8Array.from(mask), [
         markers.length,
       ]),
-      qtype: new ort.Tensor(
+      qtype: new this.runtime.Tensor(
         "int64",
         BigInt64Array.from([BigInt(question.qtype)]),
         [1],
@@ -76,12 +78,13 @@ class OnnxDriver implements Driver {
 }
 
 async function createSession(
+  runtime: typeof ort,
   graph: Uint8Array,
   data: Uint8Array,
   options: LoadOptions,
 ): Promise<{ session: ort.InferenceSession; backend: Backend }> {
   const create = (backend: Backend) =>
-    ort.InferenceSession.create(graph, {
+    runtime.InferenceSession.create(graph, {
       executionProviders: backend === "webgpu" ? ["webgpu", "wasm"] : ["wasm"],
       externalData: [{ path: "model.onnx.data", data }],
       // Preserve portable ONNX ops rather than introducing CPU-only fused operators.
@@ -102,59 +105,21 @@ async function createSession(
   }
 }
 
-/**
- * Loads a Laya model checkpoint into browser memory.
- *
- * @remarks
- * Runtime characteristics:
- * - Downloads assets from `options.modelUrl` (~900 MB total)
- * - Validates manifest structure and file sizes
- * - Initializes ONNX Runtime Web session (WebGPU with WASM fallback)
- * - Executes entirely client-side without remote server calls
- * - Operates in either main thread or Web Worker
- *
- * Global environment configuration:
- * - Sets `ort.env.wasm.numThreads` to `1`
- * - Applies `options.wasmPaths` to ONNX Runtime environment
- *
- * @param options - Checkpoint location and runtime configuration
- * @returns Initialized {@link Agent} instance
- * @throws TypeError - Missing `modelUrl`, invalid backend, or malformed config
- * @throws Error - Asset download failure, size mismatch, or invalid manifest
- * @throws Error - Operation aborted via `options.signal`
- *
- * @example
- * ```ts
- * const agent = await load({
- *   modelUrl: "/models/laya/",
- *   backend: "auto",
- *   wasmPaths: "/ort/",
- *   signal: AbortSignal.timeout(300_000),
- *   onProgress: (event) => {
- *     if (event.phase === "download" && event.total) {
- *       console.log(`${event.file}: ${event.loaded} / ${event.total}`);
- *     }
- *   },
- * });
- * console.log("Running on", agent.backend);
- * ```
- *
- * @see {@link Agent.dispose}
- */
-export async function load(options: LoadOptions): Promise<Agent> {
+export async function loadWithRuntime(
+  options: LoadOptions,
+  runtime: typeof ort,
+  base: URL,
+  read?: AssetReader,
+): Promise<Agent> {
   if (!options.modelUrl) throw new TypeError("modelUrl is required");
   if (options.backend && !["auto", "wasm", "webgpu"].includes(options.backend))
     throw new TypeError("Unknown backend");
   options.signal?.throwIfAborted();
   // ORT environment settings are process-wide: configure consistently before first load.
-  ort.env.wasm.numThreads = 1;
-  if (options.wasmPaths) ort.env.wasm.wasmPaths = options.wasmPaths;
-  const base = new URL(
-    options.modelUrl.endsWith("/") ? options.modelUrl : `${options.modelUrl}/`,
-    globalThis.location?.href,
-  );
+  runtime.env.wasm.numThreads = 1;
+  if (options.wasmPaths) runtime.env.wasm.wasmPaths = options.wasmPaths;
   const get = (file: string, bytes?: number) =>
-    download(base, file, options, bytes);
+    download(base, file, options, bytes, read);
   const json = (data: Uint8Array) => JSON.parse(new TextDecoder().decode(data));
   const config: unknown = json(await get("config.json"));
   validateConfig(config);
@@ -171,6 +136,7 @@ export async function load(options: LoadOptions): Promise<Agent> {
       files.map((file) => [file, config.files?.[file]?.bytes]),
     ),
     options,
+    read,
   );
   const tokenizer = createTokenizer(
     json(assets["tokenizer/tokenizer.json"]),
@@ -188,7 +154,12 @@ export async function load(options: LoadOptions): Promise<Agent> {
   const data = assets["model.onnx.data"];
   options.signal?.throwIfAborted();
   options.onProgress?.({ phase: "initialize" });
-  const { session, backend } = await createSession(graph, data, options);
+  const { session, backend } = await createSession(
+    runtime,
+    graph,
+    data,
+    options,
+  );
   if (options.signal?.aborted) {
     await session.release();
     options.signal.throwIfAborted();
@@ -196,6 +167,6 @@ export async function load(options: LoadOptions): Promise<Agent> {
   return new Agent(
     config,
     tokenizer,
-    new OnnxDriver(backend, session, embeddings, config),
+    new OnnxDriver(runtime, backend, session, embeddings, config),
   );
 }

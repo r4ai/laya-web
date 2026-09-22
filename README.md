@@ -4,7 +4,7 @@
 [![GitHub Pages](https://img.shields.io/badge/Demo-GitHub%20Pages-brightgreen)](https://r4ai.github.io/laya-web/)
 [![npm version](https://img.shields.io/npm/v/@r4ai/laya-web)](https://www.npmjs.com/package/@r4ai/laya-web)
 
-Client-side inference runtime for [Laya-MLX](https://github.com/mizorewww/laya-mlx) decision models in the browser, powered by ONNX Runtime Web (WebGPU and WebAssembly SIMD).
+Client-side inference runtime for [Laya-MLX](https://github.com/mizorewww/laya-mlx) decision models in browsers and Node.js, powered by ONNX Runtime Web (WebGPU and WebAssembly SIMD).
 
 Laya evaluates structured decisions (**typed decisions**) directly over input state or text without generating free-form text:
 
@@ -131,6 +131,30 @@ try {
   await agent.dispose();
 }
 ```
+
+## Node.js
+
+Node.js 22 or later can use the same ESM import. Conditional exports select the Node runtime, where `auto` and `wasm` use single-threaded WASM on the CPU. `webgpu` is browser-only. No extra native runtime dependency or `wasmPaths` setup is required.
+
+```ts
+import { load } from "@r4ai/laya-web";
+
+const nodeAgent = await load({ modelUrl: "./models/laya" });
+try {
+  console.log(
+    await nodeAgent.predict("Please refund the duplicate charge.", {
+      refund: {
+        type: "noul",
+        instructions: "Does the customer request a refund?",
+      },
+    }),
+  );
+} finally {
+  await nodeAgent.dispose();
+}
+```
+
+`modelUrl` accepts a relative path (resolved against the working directory), an absolute path, a `file:` URL string, or an HTTP(S) URL. Use the same exported model files listed below. File reads retain progress reporting, manifest size checks, and `AbortSignal` cancellation. Inference runs locally; keep the model loaded across requests and dispose it when finished. Loading the real checkpoint still requires memory for the assets and the WASM session.
 
 ## Decision Types
 
