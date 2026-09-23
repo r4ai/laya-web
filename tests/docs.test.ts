@@ -33,24 +33,31 @@ it("typechecks the actual README example against the public API", () => {
     (match) => match[1],
   );
   expect(examples.length).toBeGreaterThan(0);
-  for (const code of examples) {
-    const filename = resolve("readme-example.ts");
-    const config = ts.readConfigFile("tsconfig.json", ts.sys.readFile);
-    const { options } = ts.parseJsonConfigFileContent(
-      config.config,
-      ts.sys,
-      process.cwd(),
-    );
-    const host = ts.createCompilerHost(options);
-    const original = host.getSourceFile.bind(host);
-    host.getSourceFile = (path, version, onError, create) =>
-      path === filename
-        ? ts.createSourceFile(path, code, version, true)
-        : original(path, version, onError, create);
-    const program = ts.createProgram([filename], options, host);
-    const errors = ts
-      .getPreEmitDiagnostics(program)
-      .map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
-    expect(errors).toEqual([]);
-  }
+  // Separate virtual modules keep examples independent while sharing one compiler program.
+  const sources = new Map(
+    examples.map((code, index) => [
+      resolve(`readme-example-${index}.ts`),
+      code + "\nexport {};\n",
+    ]),
+  );
+  const config = ts.readConfigFile("tsconfig.json", ts.sys.readFile);
+  const { options } = ts.parseJsonConfigFileContent(
+    config.config,
+    ts.sys,
+    process.cwd(),
+  );
+  const host = ts.createCompilerHost(options);
+  const original = host.getSourceFile.bind(host);
+  host.getSourceFile = (path, version, onError, create) => {
+    const code = sources.get(path);
+    return code === undefined
+      ? original(path, version, onError, create)
+      : ts.createSourceFile(path, code, version, true);
+  };
+  const program = ts.createProgram([...sources.keys()], options, host);
+  const errors = ts.getPreEmitDiagnostics(program).map((diagnostic) => ({
+    file: diagnostic.file?.fileName,
+    message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+  }));
+  expect(errors).toEqual([]);
 });
